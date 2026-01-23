@@ -1,4 +1,17 @@
+mod config;
+mod llm;
+mod telemetry;
+
+use crate::config::{CloudProviderType, Config, LlmProvider, LocalProviderType};
+use crate::llm::{LlmBackend, cloud::CloudClient, embedded::EmbeddedClient, local::LocalClient};
+use crate::telemetry::Telemetry;
+use anyhow::Result;
+use atty::Stream;
 use clap::Parser;
+use colored::*;
+use dialoguer::{Confirm, Input, Select};
+use indicatif::{ProgressBar, ProgressStyle};
+use std::io::{self, Read};
 
 #[derive(Parser, Debug)]
 #[command(name = "hi-shell")]
@@ -9,17 +22,367 @@ use clap::Parser;
 struct Args {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     input: Vec<String>,
+
+    #[arg(long, help = "Initialize configuration")]
+    init: bool,
+
+    #[arg(long, help = "Force non-interactive mode")]
+    non_interactive: bool,
+
+    #[arg(short, long, help = "Override the model name")]
+    model: Option<String>,
+
+    #[arg(long, help = "Do not save the model override to configuration")]
+    temp: bool,
 }
-fn main() {
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    if let Err(e) = run().await {
+        eprintln!("\n{} {}: {}", "❌".red(), "Error".red().bold(), e);
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+async fn run() -> Result<()> {
     let args = Args::parse();
 
-    if args.input.is_empty() {
-        println!("Hi! This is Interactive mode. What do you want to do? (exit to quit)");
-        // we will add REPL loop here
-    } else {
-        let user_input = args.input.join(" ");
-        println!("Input: '{}'", user_input);
-        // We will call llm here
-        println!("(Command will be generated here)");
+    if args.init {
+        run_init().await?;
+        return Ok(());
     }
+
+    let mut config = Config::load()?;
+
+    // Override model if provided via CLI
+    if let Some(model_override) = args.model {
+        match config.llm_provider {
+            LlmProvider::Embedded => config.embedded_model = Some(model_override),
+            LlmProvider::Local => config.local_model = Some(model_override),
+            LlmProvider::Cloud => config.cloud_model = Some(model_override),
+        }
+
+        // Save the config by default, unless --temp is specified
+        if !args.temp {
+            config.save()?;
+            println!(
+                "{} Model updated permanently to configuration.",
+                "⚙".yellow()
+            );
+        }
+    }
+
+    let telemetry = Telemetry::new(&config);
+
+    if !atty::is(Stream::Stdin) {
+        // Pipe mode
+        let mut buffer = String::new();
+        io::stdin().read_to_string(&mut buffer)?;
+        process_request(&buffer, &config, &telemetry).await?;
+    } else if !args.input.is_empty() {
+        // One-shot mode
+        let user_input = args.input.join(" ");
+        process_request(&user_input, &config, &telemetry).await?;
+    } else {
+        // REPL mode
+        run_repl(&config, &telemetry).await?;
+    }
+
+    Ok(())
+}
+
+async fn run_init() -> Result<()> {
+    println!("{}", "Welcome to hi-shell Configuration!".bold().green());
+
+    let provider_idx = Select::new()
+        .with_prompt("How would you like to run LLM?")
+        .items(&[
+            "Embedded (Phi-3-mini)",
+            "Local (Ollama/LM Studio)",
+            "Cloud (OpenRouter/Gemini/Anthropic)",
+        ])
+        .default(0)
+        .interact()?;
+
+    let mut config = Config::default();
+
+    match provider_idx {
+        0 => {
+            config.llm_provider = LlmProvider::Embedded;
+
+            config.embedded_model = Some(
+                Input::new()
+                    .with_prompt("HuggingFace Model Repo")
+                    .default("microsoft/Phi-3-mini-4k-instruct-gguf".to_string())
+                    .interact_text()?,
+            );
+
+            config.embedded_model_file = Some(
+                Input::new()
+                    .with_prompt("GGUF Filename")
+                    .default("Phi-3-mini-4k-instruct-q4.gguf".to_string())
+                    .interact_text()?,
+            );
+
+            println!(
+                "{} Model configured. It will be downloaded on first use.",
+                "ℹ".blue()
+            );
+        }
+        1 => {
+            config.llm_provider = LlmProvider::Local;
+            let local_type_idx = Select::new()
+                .with_prompt("Choose local provider")
+                .items(&["Ollama", "LM Studio"])
+                .interact()?;
+
+            config.local_provider = Some(if local_type_idx == 0 {
+                LocalProviderType::Ollama
+            } else {
+                LocalProviderType::LmStudio
+            });
+
+            let default_url = if local_type_idx == 0 {
+                "http://localhost:11434/api/generate"
+            } else {
+                "http://localhost:1234/v1/chat/completions"
+            };
+            let url: String = Input::new()
+                .with_prompt("API URL")
+                .default(default_url.to_string())
+                .interact_text()?;
+            config.local_url = Some(url.clone());
+
+            // Try to fetch models automatically
+            println!("{} Fetching available models...", "⏳".blue());
+            let models =
+                LocalClient::list_models(config.local_provider.as_ref().unwrap(), &url).await;
+
+            match models {
+                Ok(model_list) if !model_list.is_empty() => {
+                    let model_idx = Select::new()
+                        .with_prompt("Select a model")
+                        .items(&model_list)
+                        .default(0)
+                        .interact()?;
+                    config.local_model = Some(model_list[model_idx].clone());
+                }
+                _ => {
+                    println!(
+                        "{} Could not fetch models automatically. Please enter manually.",
+                        "⚠️".yellow()
+                    );
+                    config.local_model = Some(
+                        Input::new()
+                            .with_prompt("Model name")
+                            .default("phi3".to_string())
+                            .interact_text()?,
+                    );
+                }
+            }
+        }
+        2 => {
+            config.llm_provider = LlmProvider::Cloud;
+            let cloud_type_idx = Select::new()
+                .with_prompt("Choose cloud provider")
+                .items(&["OpenRouter", "Gemini", "Anthropic"])
+                .interact()?;
+
+            config.cloud_provider = Some(match cloud_type_idx {
+                0 => CloudProviderType::OpenRouter,
+                1 => CloudProviderType::Gemini,
+                _ => CloudProviderType::Anthropic,
+            });
+
+            config.api_key = Some(
+                Input::<String>::new()
+                    .with_prompt("Enter API Key")
+                    .interact_text()?,
+            );
+
+            // Try to fetch models for Cloud too
+            println!("{} Fetching cloud models...", "⏳".blue());
+            let cloud_models = CloudClient::list_models(
+                config.cloud_provider.as_ref().unwrap(),
+                config.api_key.as_deref(),
+            )
+            .await;
+
+            match cloud_models {
+                Ok(model_list) if !model_list.is_empty() => {
+                    let model_idx = Select::new()
+                        .with_prompt("Select a cloud model")
+                        .items(&model_list)
+                        .default(0)
+                        .interact()?;
+                    config.cloud_model = Some(model_list[model_idx].clone());
+                }
+                _ => {
+                    println!(
+                        "{} Could not fetch models automatically. Please enter manually.",
+                        "⚠️".yellow()
+                    );
+                    config.cloud_model = Some(
+                        Input::new()
+                            .with_prompt("Cloud Model Name")
+                            .default("google/gemini-2.0-flash-exp:free".to_string())
+                            .interact_text()?,
+                    );
+                }
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    config.telemetry_enabled = Confirm::new()
+        .with_prompt("Do you allow anonymous telemetry (usage stats and error reports)?")
+        .default(true)
+        .interact()?;
+
+    config.save()?;
+    println!("{}", "\nConfiguration saved successfully!".green());
+    Ok(())
+}
+
+async fn process_request(request: &str, config: &Config, telemetry: &Telemetry) -> Result<()> {
+    let start_time = std::time::Instant::now();
+    let provider_name = format!("{:?}", config.llm_provider);
+
+    // We cannot track model name easily here because it lives inside specific config fields
+    // but we can imply it or extract it if needed. For now keeping it simple.
+
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+            .template("{spinner:.blue} {msg}")?,
+    );
+    pb.set_message("Generating command...");
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+
+    let backend: Box<dyn LlmBackend> = match config.llm_provider {
+        LlmProvider::Embedded => {
+            Box::new(EmbeddedClient::new(config.clone())) as Box<dyn LlmBackend>
+        }
+        LlmProvider::Local => Box::new(LocalClient::new(config.clone())) as Box<dyn LlmBackend>,
+        LlmProvider::Cloud => Box::new(CloudClient::new(config.clone())) as Box<dyn LlmBackend>,
+    };
+
+    let response_result = backend.generate_command(request).await;
+    let latency_ms = start_time.elapsed().as_millis() as u64;
+
+    match response_result {
+        Ok(response) => {
+            pb.finish_and_clear();
+
+            telemetry.track_event(
+                "command_generated",
+                serde_json::json!({
+                    "provider": provider_name,
+                    "latency_ms": latency_ms,
+                    "dangerous": response.dangerous,
+                    "success": true
+                }),
+            );
+
+            // \x1B[2K clears the entire line, \r moves cursor to start
+            println!("\x1B[2K\r{} Proposed command:", "✔".green().bold());
+
+            // Render command in a boxed style
+            let cmd = response.command.trim();
+            let width = cmd.len() + 4;
+            let border = "═".repeat(width);
+            println!("  ╔{}╗", border);
+            println!("  ║  {}  ║", cmd.bold().cyan());
+            println!("  ╚{}╝", border);
+
+            if let Some(explanation) = &response.explanation {
+                println!("\n{} {}", "💡".yellow(), explanation.italic());
+            }
+
+            if response.dangerous {
+                println!(
+                    "\n{} {}",
+                    "⚠️  WARNING:".red().bold(),
+                    "This command is marked as dangerous!".red()
+                );
+                if !Confirm::new()
+                    .with_prompt("Do you definitely want to execute this?")
+                    .default(false)
+                    .interact()?
+                {
+                    telemetry.track_event(
+                        "command_aborted",
+                        serde_json::json!({
+                            "reason": "dangerous_confirmation_rejected"
+                        }),
+                    );
+                    return Ok(());
+                }
+            } else {
+                println!("\n{} Executing safely...", "➜".blue());
+            }
+
+            execute_command(&response.command)?;
+
+            telemetry.track_event(
+                "command_executed",
+                serde_json::json!({
+                    "provider": provider_name
+                }),
+            );
+
+            Ok(())
+        }
+        Err(e) => {
+            pb.finish_with_message("Generation failed");
+            telemetry.track_event(
+                "command_failed",
+                serde_json::json!({
+                    "provider": provider_name,
+                    "latency_ms": latency_ms,
+                    "error": e.to_string()
+                }),
+            );
+            Err(e)
+        }
+    }
+}
+
+fn execute_command(cmd: &str) -> Result<()> {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .status()?;
+    Ok(())
+}
+
+async fn run_repl(config: &Config, telemetry: &Telemetry) -> Result<()> {
+    use rustyline::DefaultEditor;
+    let mut rl = DefaultEditor::new()?;
+
+    println!("hi-shell REPL mode. Type 'exit' to quit.");
+
+    loop {
+        let readline = rl.readline("hi-shell ➜ ");
+        match readline {
+            Ok(line) => {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if line == "exit" || line == "quit" {
+                    break;
+                }
+
+                rl.add_history_entry(line)?;
+                if let Err(e) = process_request(line, config, telemetry).await {
+                    eprintln!("Error: {}", e);
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    Ok(())
 }

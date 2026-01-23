@@ -23,4 +23,6 @@ target
 
 # Added by cargo
 
+
 /target
+.env
