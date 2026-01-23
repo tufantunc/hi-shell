@@ -2,6 +2,12 @@
 name = "hi-shell"
 version = "0.1.0"
 edition = "2024"
+description = "An intelligent terminal assistant that translates natural language descriptions into executable shell commands."
+license = "MIT"
+repository = "https://github.com/tufantunc/hi-shell"
+readme = "README.md"
+keywords = ["cli", "llm", "shell", "assistant", "ai"]
+categories = ["command-line-utilities", "development-tools"]
 
 [features]
 default = []
