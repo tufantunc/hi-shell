@@ -1,12 +1,25 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub mod cloud;
 pub mod embedded;
 pub mod local;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum Role {
+    System,
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Message {
+    pub role: Role,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CommandResponse {
     pub command: String,
     pub explanation: Option<String>,
@@ -15,7 +28,7 @@ pub struct CommandResponse {
 
 #[async_trait]
 pub trait LlmBackend: Send + Sync {
-    async fn generate_command(&self, user_request: &str) -> Result<CommandResponse>;
+    async fn generate_command(&self, messages: &[Message]) -> Result<CommandResponse>;
 }
 
 pub fn get_system_info() -> String {
@@ -43,6 +56,7 @@ COMPATIBILITY RULES:
 3. On macOS (Darwin/BSD), AVOID GNU-only flags (e.g., use 'du -d 1' instead of 'du --max-depth=1').
 4. On Windows, ensure syntax is correct for the detected shell (PowerShell or CMD).
 5. If multiple ways exist, prioritize the most portable and standard version for the specific environment.
+6. MANDATORY: You must escape backslashes in the "command" string (e.g., "C:\\Users" instead of "C:\Users").
 
 Context:
 {}
@@ -55,4 +69,35 @@ Schema:
 }}"#,
         system_info
     )
+}
+
+/// Helper to clean and parse LLM JSON responses that might be slightly malformed.
+pub fn parse_llm_response(content: &str) -> Result<CommandResponse> {
+    // 1. Remove markdown code blocks
+    let clean = content.replace("```json", "").replace("```", "");
+    let clean = clean.trim();
+
+    // 2. Extract content between first { and last }
+    let json_str = if let (Some(start), Some(end)) = (clean.find('{'), clean.rfind('}')) {
+        &clean[start..=end]
+    } else {
+        clean
+    };
+
+    // 3. Attempt to fix common escape errors (e.g. unescaped backslashes in paths)
+    // This is a naive fix: replace single backslashes not followed by valid escape chars
+    // However, it's safer to just try parsing first.
+    match serde_json::from_str::<CommandResponse>(json_str) {
+        Ok(res) => Ok(res),
+        Err(e) => {
+            // If it fails with an escape error, try a simple regex-based escaping of backslashes
+            // only if they are not already part of a valid escape sequence.
+            // For now, let's just return the error but with better context.
+            Err(anyhow::anyhow!(
+                "JSON Parse Error: {}. Raw content: {}",
+                e,
+                json_str
+            ))
+        }
+    }
 }

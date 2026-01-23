@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::llm::{CommandResponse, LlmBackend};
+use crate::llm::{CommandResponse, LlmBackend, Message};
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use candle_core::{Device, quantized::gguf_file};
@@ -185,39 +185,32 @@ impl EmbeddedClient {
 
 #[async_trait]
 impl LlmBackend for EmbeddedClient {
-    async fn generate_command(&self, user_request: &str) -> Result<CommandResponse> {
+    async fn generate_command(&self, messages: &[Message]) -> Result<CommandResponse> {
         let loaded = self.load_or_get_model()?;
         let system_prompt = crate::llm::get_system_prompt();
-        let prompt = format!(
-            "<|system|>\n{}\n<|end|>\n<|user|>\n{}\n<|end|>\n<|assistant|>\n",
-            system_prompt, user_request
-        );
+
+        let mut prompt = format!("<|system|>\n{}\n<|end|>\n", system_prompt);
+        for msg in messages {
+            match msg.role {
+                crate::llm::Role::User => {
+                    prompt.push_str(&format!("<|user|>\n{}\n<|end|>\n", msg.content));
+                }
+                crate::llm::Role::Assistant => {
+                    prompt.push_str(&format!("<|assistant|>\n{}\n<|end|>\n", msg.content));
+                }
+                crate::llm::Role::System => {
+                    // Treat system/tool output as user context in the chat
+                    prompt.push_str(&format!(
+                        "<|user|>\nPrevious Command Output: {}\n<|end|>\n",
+                        msg.content
+                    ));
+                }
+            }
+        }
+        prompt.push_str("<|assistant|>\n");
 
         let raw_response = self.generate_text(&loaded, &prompt, 256)?;
 
-        // Helper to extract JSON if wrapped in markdown
-        let clean_response = raw_response.trim();
-        let clean_response = if let Some(stripped) = clean_response.strip_prefix("```json") {
-            stripped.strip_suffix("```").unwrap_or(stripped).trim()
-        } else if let Some(stripped) = clean_response.strip_prefix("```") {
-            stripped.strip_suffix("```").unwrap_or(stripped).trim()
-        } else {
-            clean_response
-        };
-
-        // Extract substring between { and } just in case
-        let json_str = if let (Some(start), Some(end)) =
-            (clean_response.find('{'), clean_response.rfind('}'))
-        {
-            &clean_response[start..=end]
-        } else {
-            clean_response
-        };
-
-        // Parse JSON
-        let response: CommandResponse = serde_json::from_str(json_str)
-            .map_err(|e| anyhow!("Failed to parse LLM response: {}. Raw: {}", e, raw_response))?;
-
-        Ok(response)
+        crate::llm::parse_llm_response(&raw_response)
     }
 }

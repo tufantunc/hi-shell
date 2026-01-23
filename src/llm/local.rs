@@ -1,5 +1,5 @@
 use crate::config::{Config, LocalProviderType};
-use crate::llm::{CommandResponse, LlmBackend};
+use crate::llm::{CommandResponse, LlmBackend, Message};
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use serde_json::json;
@@ -71,7 +71,7 @@ impl LocalClient {
 
 #[async_trait]
 impl LlmBackend for LocalClient {
-    async fn generate_command(&self, user_request: &str) -> Result<CommandResponse> {
+    async fn generate_command(&self, messages: &[Message]) -> Result<CommandResponse> {
         let provider = self
             .config
             .local_provider
@@ -91,9 +91,20 @@ impl LlmBackend for LocalClient {
 
         let res_text = match provider {
             LocalProviderType::Ollama => {
+                let mut combined_prompt = format!("System: {}\n", system_prompt);
+                for msg in messages {
+                    let role_str = match msg.role {
+                        crate::llm::Role::System => "System/Output",
+                        crate::llm::Role::User => "User",
+                        crate::llm::Role::Assistant => "Assistant",
+                    };
+                    combined_prompt.push_str(&format!("{}: {}\n", role_str, msg.content));
+                }
+                combined_prompt.push_str("\nGenerate the next command:");
+
                 let body = json!({
                     "model": model,
-                    "prompt": format!("System: {}\nUser: {}", system_prompt, user_request),
+                    "prompt": combined_prompt,
                     "stream": false,
                     "format": "json"
                 });
@@ -112,12 +123,18 @@ impl LlmBackend for LocalClient {
                     .to_string()
             }
             LocalProviderType::LmStudio => {
+                let mut api_messages = vec![json!({"role": "system", "content": system_prompt})];
+                for msg in messages {
+                    let role = match msg.role {
+                        crate::llm::Role::Assistant => "assistant",
+                        _ => "user",
+                    };
+                    api_messages.push(json!({"role": role, "content": msg.content}));
+                }
+
                 let body = json!({
                     "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_request}
-                    ],
+                    "messages": api_messages,
                     "response_format": { "type": "json_object" }
                 });
 
@@ -136,10 +153,6 @@ impl LlmBackend for LocalClient {
             }
         };
 
-        // Some models might wrap JSON in markdown code blocks despite instructions
-        let clean_content = res_text.replace("```json", "").replace("```", "");
-        let response: CommandResponse = serde_json::from_str(clean_content.trim())?;
-
-        Ok(response)
+        crate::llm::parse_llm_response(&res_text)
     }
 }

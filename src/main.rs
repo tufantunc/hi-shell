@@ -75,15 +75,17 @@ async fn run() -> Result<()> {
 
     let telemetry = Telemetry::new(&config);
 
+    let mut history = Vec::new();
+
     if !atty::is(Stream::Stdin) {
         // Pipe mode
         let mut buffer = String::new();
         io::stdin().read_to_string(&mut buffer)?;
-        process_request(&buffer, &config, &telemetry).await?;
+        process_request(&buffer, &config, &telemetry, &mut history).await?;
     } else if !args.input.is_empty() {
         // One-shot mode
         let user_input = args.input.join(" ");
-        process_request(&user_input, &config, &telemetry).await?;
+        process_request(&user_input, &config, &telemetry, &mut history).await?;
     } else {
         // REPL mode
         run_repl(&config, &telemetry).await?;
@@ -246,12 +248,20 @@ async fn run_init() -> Result<()> {
     Ok(())
 }
 
-async fn process_request(request: &str, config: &Config, telemetry: &Telemetry) -> Result<()> {
+async fn process_request(
+    request: &str,
+    config: &Config,
+    telemetry: &Telemetry,
+    history: &mut Vec<crate::llm::Message>,
+) -> Result<()> {
     let start_time = std::time::Instant::now();
     let provider_name = format!("{:?}", config.llm_provider);
 
-    // We cannot track model name easily here because it lives inside specific config fields
-    // but we can imply it or extract it if needed. For now keeping it simple.
+    // Add user request to history
+    history.push(crate::llm::Message {
+        role: crate::llm::Role::User,
+        content: request.to_string(),
+    });
 
     let pb = ProgressBar::new_spinner();
     pb.set_style(
@@ -270,7 +280,7 @@ async fn process_request(request: &str, config: &Config, telemetry: &Telemetry) 
         LlmProvider::Cloud => Box::new(CloudClient::new(config.clone())) as Box<dyn LlmBackend>,
     };
 
-    let response_result = backend.generate_command(request).await;
+    let response_result = backend.generate_command(history).await;
     let latency_ms = start_time.elapsed().as_millis() as u64;
 
     match response_result {
@@ -286,6 +296,13 @@ async fn process_request(request: &str, config: &Config, telemetry: &Telemetry) 
                     "success": true
                 }),
             );
+
+            // Add assistant response to history
+            // We store the serialized successful response to keep it consistent for next turns
+            history.push(crate::llm::Message {
+                role: crate::llm::Role::Assistant,
+                content: serde_json::to_string(&response)?,
+            });
 
             // \x1B[2K clears the entire line, \r moves cursor to start
             println!("\x1B[2K\r{} Proposed command:", "✔".green().bold());
@@ -325,7 +342,25 @@ async fn process_request(request: &str, config: &Config, telemetry: &Telemetry) 
                 println!("\n{} Executing safely...", "➜".blue());
             }
 
-            execute_command(&response.command)?;
+            let output = execute_command(&response.command)?;
+
+            // Add command output to history
+            // Truncate output to avoid context overflow (e.g. 1000 chars)
+            let truncated_output = if output.len() > 1000 {
+                format!("{}... (truncated)", &output[..1000])
+            } else {
+                output
+            };
+
+            history.push(crate::llm::Message {
+                role: crate::llm::Role::System,
+                content: truncated_output,
+            });
+
+            // Keep history limited to last 10 interactions (approx 3 messages per interaction)
+            if history.len() > 30 {
+                history.drain(0..(history.len() - 30));
+            }
 
             telemetry.track_event(
                 "command_executed",
@@ -351,17 +386,38 @@ async fn process_request(request: &str, config: &Config, telemetry: &Telemetry) 
     }
 }
 
-fn execute_command(cmd: &str) -> Result<()> {
-    std::process::Command::new("sh")
+fn execute_command(cmd: &str) -> Result<String> {
+    let output = std::process::Command::new("sh")
         .arg("-c")
         .arg(cmd)
-        .status()?;
-    Ok(())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !stdout.is_empty() {
+        println!("{}", stdout);
+    }
+    if !stderr.is_empty() {
+        eprintln!("{}", stderr);
+    }
+
+    let mut combined = stdout;
+    if !stderr.is_empty() {
+        combined.push_str("\nError:\n");
+        combined.push_str(&stderr);
+    }
+
+    Ok(combined)
 }
 
 async fn run_repl(config: &Config, telemetry: &Telemetry) -> Result<()> {
     use rustyline::DefaultEditor;
     let mut rl = DefaultEditor::new()?;
+    let mut history = Vec::new();
 
     println!("hi-shell REPL mode. Type 'exit' to quit.");
 
@@ -378,7 +434,7 @@ async fn run_repl(config: &Config, telemetry: &Telemetry) -> Result<()> {
                 }
 
                 rl.add_history_entry(line)?;
-                if let Err(e) = process_request(line, config, telemetry).await {
+                if let Err(e) = process_request(line, config, telemetry, &mut history).await {
                     eprintln!("Error: {}", e);
                 }
             }
