@@ -17,10 +17,29 @@
 
 ## 🚀 Installation
 
-For now, you can download the pre-built binaries for your operating system from the [Releases](https://github.com/tufantunc/hi-shell/releases) page.
+You can install `hi-shell` using your preferred method:
+
+### 🍏 Homebrew (macOS & Linux)
+```bash
+brew tap tufantunc/tap
+brew install hi-shell
+```
+
+### 🦀 Cargo
+If you have Rust installed, you can install it via Cargo:
+```bash
+# Install via crates.io
+cargo install hi-shell
+
+# OR install pre-compiled binary via cargo-binstall
+cargo binstall hi-shell
+```
+
+### 📦 Manual Download
+You can download the pre-built binaries for your operating system from the [Releases](https://github.com/tufantunc/hi-shell/releases) page.
 
 1. Download the version corresponding to your OS (macOS, Linux, or Windows).
-2. (Optional) Move the binary to a folder in your `PATH` for easy access.
+2. Move the binary to a folder in your `PATH`.
 3. Run `hi-shell --init` to set up your preferred LLM provider.
 
 ## 🛠 Development
