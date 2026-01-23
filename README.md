@@ -25,6 +25,12 @@ brew tap tufantunc/tap
 brew install hi-shell
 ```
 
+### 🪟 Scoop (Windows)
+```powershell
+scoop bucket add hi-shell https://github.com/tufantunc/scoop-bucket
+scoop install hi-shell
+```
+
 ### 🦀 Cargo
 If you have Rust installed, you can install it via Cargo:
 ```bash

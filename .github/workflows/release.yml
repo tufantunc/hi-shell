@@ -94,3 +94,51 @@ jobs:
           commit-message: "Release ${{ github.ref_name }}"
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  publish-scoop:
+    name: Update Scoop Manifest
+    runs-on: ubuntu-latest
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout Bucket
+        uses: actions/checkout@v4
+        with:
+          repository: tufantunc/scoop-bucket
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: bucket
+
+      - name: Update manifest
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          URL="https://github.com/tufantunc/hi-shell/releases/download/v${VERSION}/hi-shell-x86_64-pc-windows-msvc.zip"
+          
+          # Download to compute hash
+          curl -L -o release.zip $URL
+          HASH=$(sha256sum release.zip | awk '{print $1}')
+          
+          mkdir -p bucket/bucket
+          cat > bucket/bucket/hi-shell.json <<EOF
+          {
+              "version": "${VERSION}",
+              "description": "An intelligent terminal assistant that translates natural language descriptions into executable shell commands.",
+              "homepage": "https://github.com/tufantunc/hi-shell",
+              "license": "MIT",
+              "url": "${URL}",
+              "hash": "${HASH}",
+              "bin": "hi-shell.exe",
+              "checkver": "github",
+              "autoupdate": {
+                  "url": "https://github.com/tufantunc/hi-shell/releases/download/v\$version/hi-shell-x86_64-pc-windows-msvc.zip"
+              }
+          }
+          EOF
+
+      - name: Commit and Push
+        run: |
+          cd bucket
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Update hi-shell to ${GITHUB_REF#refs/tags/}" || exit 0
+          git push
