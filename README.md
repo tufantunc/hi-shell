@@ -19,6 +19,11 @@
 
 You can install `hi-shell` using your preferred method:
 
+### ⚡ Quick Install (macOS & Linux)
+```bash
+curl -sSL https://raw.githubusercontent.com/tufantunc/hi-shell/main/install.sh | bash
+```
+
 ### 🍏 Homebrew (macOS & Linux)
 ```bash
 brew tap tufantunc/tap
