@@ -40,6 +40,8 @@ jobs:
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }} ${{ matrix.features }}
+        env:
+          HI_SHELL_POSTHOG_KEY: ${{ secrets.HI_SHELL_POSTHOG_KEY }}
 
       - name: Package Binary (Unix)
         if: runner.os != 'Windows'
@@ -78,6 +80,7 @@ jobs:
         run: cargo publish --token ${CARGO_REGISTRY_TOKEN}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          HI_SHELL_POSTHOG_KEY: ${{ secrets.HI_SHELL_POSTHOG_KEY }}
 
   publish-homebrew:
     name: Update Homebrew Formula
