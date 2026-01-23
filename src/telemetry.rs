@@ -5,6 +5,7 @@ pub struct Telemetry {
     api_key: Option<&'static str>,
     installation_id: String,
     enabled: bool,
+    handles: std::sync::Arc<std::sync::Mutex<Vec<tokio::task::JoinHandle<()>>>>,
 }
 
 impl Telemetry {
@@ -16,6 +17,7 @@ impl Telemetry {
             api_key,
             installation_id: config.installation_id.clone(),
             enabled: config.telemetry_enabled && api_key.is_some(),
+            handles: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 
@@ -38,7 +40,7 @@ impl Telemetry {
             obj.insert("platform_arch".to_string(), json!(std::env::consts::ARCH));
         }
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let client = reqwest::Client::new();
             let body = json!({
                 "api_key": api_key,
@@ -53,5 +55,30 @@ impl Telemetry {
                 .send()
                 .await;
         });
+
+        if let Ok(mut handles) = self.handles.lock() {
+            handles.push(handle);
+        }
+    }
+
+    pub async fn flush(&self) {
+        if !self.enabled {
+            return;
+        }
+
+        let mut handles = Vec::new();
+        if let Ok(mut guard) = self.handles.lock() {
+            std::mem::swap(&mut *guard, &mut handles);
+        }
+
+        if !handles.is_empty() {
+            // Wait for all pending telemetry tasks to complete with a timeout
+            // We don't want to hang the CLI indefinitely if network is slow
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_millis(1500),
+                futures::future::join_all(handles),
+            )
+            .await;
+        }
     }
 }

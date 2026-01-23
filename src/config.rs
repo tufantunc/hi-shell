@@ -25,6 +25,7 @@ pub enum CloudProviderType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct Config {
     pub installation_id: String,
     pub llm_provider: LlmProvider,

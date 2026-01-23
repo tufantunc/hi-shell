@@ -9,7 +9,7 @@ use anyhow::Result;
 use atty::Stream;
 use clap::Parser;
 use colored::*;
-use dialoguer::{Confirm, Input, Select};
+use dialoguer::{Confirm, FuzzySelect, Input, Select};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::io::{self, Read};
 
@@ -89,6 +89,7 @@ async fn run() -> Result<()> {
         run_repl(&config, &telemetry).await?;
     }
 
+    telemetry.flush().await;
     Ok(())
 }
 
@@ -161,7 +162,7 @@ async fn run_init() -> Result<()> {
 
             match models {
                 Ok(model_list) if !model_list.is_empty() => {
-                    let model_idx = Select::new()
+                    let model_idx = FuzzySelect::new()
                         .with_prompt("Select a model")
                         .items(&model_list)
                         .default(0)
@@ -211,7 +212,7 @@ async fn run_init() -> Result<()> {
 
             match cloud_models {
                 Ok(model_list) if !model_list.is_empty() => {
-                    let model_idx = Select::new()
+                    let model_idx = FuzzySelect::new()
                         .with_prompt("Select a cloud model")
                         .items(&model_list)
                         .default(0)
