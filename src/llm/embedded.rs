@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::llm::{CommandResponse, LlmBackend, get_system_info};
+use crate::llm::{CommandResponse, LlmBackend};
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use candle_core::{Device, quantized::gguf_file};
@@ -187,13 +187,10 @@ impl EmbeddedClient {
 impl LlmBackend for EmbeddedClient {
     async fn generate_command(&self, user_request: &str) -> Result<CommandResponse> {
         let loaded = self.load_or_get_model()?;
-        let system_info = get_system_info();
-
-        // Construct detailed prompt
-        // Using Phi-3 style chat format
+        let system_prompt = crate::llm::get_system_prompt();
         let prompt = format!(
-            "<|system|>\nYou are a terminal command generator. Respond with valid JSON only.\nRULES:\n1. Follow OS/Shell context strictly.\n2. On macOS, avoid GNU-only flags (use BSD compatible).\n3. Respond with JSON schema: {{\"command\": \"string\", \"explanation\": \"string\", \"dangerous\": boolean}}\nContext: {}\n<|end|>\n<|user|>\n{}\n<|end|>\n<|assistant|>\n",
-            system_info, user_request
+            "<|system|>\n{}\n<|end|>\n<|user|>\n{}\n<|end|>\n<|assistant|>\n",
+            system_prompt, user_request
         );
 
         let raw_response = self.generate_text(&loaded, &prompt, 256)?;

@@ -31,3 +31,28 @@ pub fn get_system_info() -> String {
         os, arch, shell, cwd
     )
 }
+
+pub fn get_system_prompt() -> String {
+    let system_info = get_system_info();
+    format!(
+        r#"You are a terminal command generator. You must response with a valid JSON object only. No markdown formatting.
+
+COMPATIBILITY RULES:
+1. Strictly follow the provided Operating System and Shell context.
+2. Only suggest commands and flags that are supported on the detected platform.
+3. On macOS (Darwin/BSD), AVOID GNU-only flags (e.g., use 'du -d 1' instead of 'du --max-depth=1').
+4. On Windows, ensure syntax is correct for the detected shell (PowerShell or CMD).
+5. If multiple ways exist, prioritize the most portable and standard version for the specific environment.
+
+Context:
+{}
+
+Schema:
+{{
+  "command": "formatted bash/zsh/shell command",
+  "explanation": "concise explanation",
+  "dangerous": boolean (true if destructive like rm, dd, mkfs, or system modification, else false)
+}}"#,
+        system_info
+    )
+}
