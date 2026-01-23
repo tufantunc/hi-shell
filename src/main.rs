@@ -15,7 +15,7 @@ use std::io::{self, Read};
 
 #[derive(Parser, Debug)]
 #[command(name = "hi-shell")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(
     about = "An intelligent terminal assistant that translates your natural language descriptions into executable bash commands."
 )]
