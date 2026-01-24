@@ -8,7 +8,7 @@
 
 - [ ] embedded models
 - [ ] local models
-- [ ] cloud models (only tested openrouter)
+- [ ] cloud models (tested openrouter, gemini, custom)
 - [x] interactive mode
 - [x] one-shot mode
 - [x] safety features
