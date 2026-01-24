@@ -48,8 +48,8 @@ impl Default for Config {
         Self {
             installation_id: uuid::Uuid::new_v4().to_string(),
             llm_provider: LlmProvider::Embedded,
-            embedded_model: Some("microsoft/Phi-3-mini-4k-instruct-gguf".to_string()),
-            embedded_model_file: Some("Phi-3-mini-4k-instruct-q4.gguf".to_string()),
+            embedded_model: Some("lmstudio-community/Llama-3.2-1B-Instruct-GGUF".to_string()),
+            embedded_model_file: Some("Llama-3.2-1B-Instruct-Q4_K_M.gguf".to_string()),
             local_provider: None,
             local_url: None,
             local_model: None,

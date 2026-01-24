@@ -106,6 +106,12 @@ impl LlmBackend for LocalClient {
             .build()?;
         let system_prompt = crate::llm::get_system_prompt(repair_context);
 
+        let pb = crate::llm::create_spinner(if repair_context.is_some() {
+            "Analyzing error and fixing..."
+        } else {
+            "Generating command..."
+        })?;
+
         let res_text = match provider {
             LocalProviderType::Ollama => {
                 let mut combined_prompt = format!("System: {}\n", system_prompt);
@@ -180,6 +186,7 @@ impl LlmBackend for LocalClient {
             }
         };
 
+        pb.finish_and_clear();
         info!("Command generated successfully using local {:?}", provider);
         crate::llm::parse_llm_response(&res_text)
     }

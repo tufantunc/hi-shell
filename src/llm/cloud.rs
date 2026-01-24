@@ -153,6 +153,12 @@ impl LlmBackend for CloudClient {
             .build()?;
         let system_prompt = crate::llm::get_system_prompt(repair_context);
 
+        let pb = crate::llm::create_spinner(if repair_context.is_some() {
+            "Analyzing error and fixing..."
+        } else {
+            "Generating command..."
+        })?;
+
         let (url, body) = match provider {
             CloudProviderType::OpenRouter => {
                 let url = "https://openrouter.ai/api/v1/chat/completions";
@@ -344,6 +350,7 @@ impl LlmBackend for CloudClient {
                 .to_string(),
         };
 
+        pb.finish_and_clear();
         info!("Command generated successfully using {:?}", provider);
         crate::llm::parse_llm_response(&content)
     }

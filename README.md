@@ -6,7 +6,7 @@
 
 ## Should be test before 1.0.0 release:
 
-- [ ] embedded models
+- [x] embedded models
 - [ ] local models
 - [ ] cloud models (tested openrouter, gemini, custom)
 - [x] interactive mode
@@ -17,7 +17,7 @@
 ## ✨ Features
 
 - **Multi-LLM Support**:
-  - **Embedded**: Run models locally using `candle` (e.g., Phi-3-mini) with hardware acceleration (Metal/CUDA).
+  - **Embedded**: Run models locally using `candle` with hardware acceleration (Metal/CUDA). Supports Llama, Phi-3, and Qwen2 architectures.
   - **Local**: Connect to your own Ollama or LM Studio instance.
   - **Cloud**: Integration with OpenRouter, Gemini, and Anthropic.
 - **Interactive REPL**: A dedicated shell environment for continuous assistance.
@@ -104,6 +104,24 @@ cargo build --release
 ```
 
 The compiled binary will be located in `target/release/hi-shell`.
+
+## 🧠 Embedded Models
+
+When using the embedded LLM provider, hi-shell downloads and runs GGUF models locally. 
+
+### Supported Architectures
+- **Llama** (Llama 2, Llama 3, Llama 3.2)
+- **Phi-3** (Phi-3-mini)
+- **Qwen2** (Qwen2, Qwen2.5, Qwen2.5-Coder)
+
+### Recommended Quantization
+Use **Q4_K_M** or **Q5_K_M** quantization formats for best compatibility. Lower quantization levels (Q2_K) may not be supported.
+
+### Model Management
+```bash
+# View and manage downloaded models
+hi-shell --models
+```
 
 ## 🤝 Contributing
 

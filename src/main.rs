@@ -6,7 +6,7 @@ use dialoguer::{Confirm, FuzzySelect, Input, Select};
 use hi_shell::config::{CloudProviderType, Config, LlmProvider, LocalProviderType};
 use hi_shell::llm::{LlmBackend, cloud::CloudClient, embedded::EmbeddedClient, local::LocalClient};
 use hi_shell::telemetry::Telemetry;
-use indicatif::{ProgressBar, ProgressStyle};
+use serde::Deserialize;
 use std::io::{self, Read, Write};
 
 #[derive(Parser, Debug)]
@@ -33,6 +33,35 @@ struct Args {
 
     #[arg(short, long, help = "Enable verbose logging")]
     verbose: bool,
+
+    #[arg(long, help = "Manage downloaded embedded models")]
+    models: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct HfTreeEntry {
+    #[serde(rename = "type")]
+    entry_type: String,
+    path: String,
+}
+
+async fn fetch_gguf_files(repo: &str) -> Result<Vec<String>> {
+    let url = format!("https://huggingface.co/api/models/{}/tree/main", repo);
+    let client = reqwest::Client::new();
+    let response = client.get(&url).send().await?;
+    
+    if !response.status().is_success() {
+        anyhow::bail!("Failed to fetch model files from HuggingFace");
+    }
+    
+    let entries: Vec<HfTreeEntry> = response.json().await?;
+    let gguf_files: Vec<String> = entries
+        .into_iter()
+        .filter(|e| e.entry_type == "file" && e.path.ends_with(".gguf"))
+        .map(|e| e.path)
+        .collect();
+    
+    Ok(gguf_files)
 }
 
 #[tokio::main]
@@ -61,6 +90,11 @@ async fn run() -> Result<()> {
 
     if args.init {
         run_init().await?;
+        return Ok(());
+    }
+
+    if args.models {
+        run_model_management().await?;
         return Ok(());
     }
 
@@ -112,7 +146,7 @@ async fn run_init() -> Result<()> {
     let provider_idx = Select::new()
         .with_prompt("How would you like to run LLM?")
         .items(&[
-            "Embedded (Phi-3-mini)",
+            "Embedded (Llama-3.2-1B)",
             "Local (Ollama/LM Studio)",
             "Cloud (OpenRouter/Gemini/Anthropic)",
         ])
@@ -125,19 +159,40 @@ async fn run_init() -> Result<()> {
         0 => {
             config.llm_provider = LlmProvider::Embedded;
 
-            config.embedded_model = Some(
-                Input::new()
-                    .with_prompt("HuggingFace Model Repo")
-                    .default("microsoft/Phi-3-mini-4k-instruct-gguf".to_string())
-                    .interact_text()?,
-            );
+            let repo: String = Input::new()
+                .with_prompt("HuggingFace Model Repo")
+                .default("lmstudio-community/Llama-3.2-1B-Instruct-GGUF".to_string())
+                .interact_text()?;
 
-            config.embedded_model_file = Some(
-                Input::new()
-                    .with_prompt("GGUF Filename")
-                    .default("Phi-3-mini-4k-instruct-q4.gguf".to_string())
-                    .interact_text()?,
-            );
+            config.embedded_model = Some(repo.clone());
+
+            println!("{} Fetching available GGUF files...", "⏳".yellow());
+            
+            let gguf_file = match fetch_gguf_files(&repo).await {
+                Ok(files) if !files.is_empty() => {
+                    let idx = FuzzySelect::new()
+                        .with_prompt("Select GGUF file")
+                        .items(&files)
+                        .default(0)
+                        .interact()?;
+                    files[idx].clone()
+                }
+                Ok(_) => {
+                    println!("{} No GGUF files found, please enter manually.", "⚠".yellow());
+                    Input::new()
+                        .with_prompt("GGUF Filename")
+                        .interact_text()?
+                }
+                Err(e) => {
+                    println!("{} Could not fetch files ({}), please enter manually.", "⚠".yellow(), e);
+                    Input::new()
+                        .with_prompt("GGUF Filename")
+                        .default("Llama-3.2-1B-Instruct-Q4_K_M.gguf".to_string())
+                        .interact_text()?
+                }
+            };
+
+            config.embedded_model_file = Some(gguf_file);
 
             println!(
                 "{} Model configured. It will be downloaded on first use.",
@@ -276,6 +331,55 @@ async fn run_init() -> Result<()> {
     Ok(())
 }
 
+async fn run_model_management() -> Result<()> {
+    println!("{}", "\n--- Embedded Model Management ---".bold().green());
+
+    loop {
+        let models = EmbeddedClient::list_downloaded_models()?;
+
+        if models.is_empty() {
+            println!("No embedded models currently downloaded.");
+            return Ok(());
+        }
+
+        println!("\nCurrently downloaded models:");
+        for (i, (name, size)) in models.iter().enumerate() {
+            let size_mb = size / 1024 / 1024;
+            println!("{}. {} ({} MB)", i + 1, name.cyan(), size_mb);
+        }
+
+        let options = vec!["Delete a model", "Exit"];
+        let selection = Select::new()
+            .with_prompt("What would you like to do?")
+            .items(&options)
+            .default(0)
+            .interact()?;
+
+        if selection == 1 {
+            return Ok(());
+        }
+
+        let model_names: Vec<String> = models.iter().map(|(n, _)| n.clone()).collect();
+        let to_delete = FuzzySelect::new()
+            .with_prompt("Select model to delete")
+            .items(&model_names)
+            .interact()?;
+
+        let confirm = Confirm::new()
+            .with_prompt(format!(
+                "Are you sure you want to delete {}?",
+                model_names[to_delete]
+            ))
+            .default(false)
+            .interact()?;
+
+        if confirm {
+            EmbeddedClient::delete_model(&model_names[to_delete])?;
+            println!("{} Model deleted successfully.", "✔".green());
+        }
+    }
+}
+
 async fn process_request(
     request: &str,
     config: &Config,
@@ -302,19 +406,6 @@ async fn process_request(
 
     loop {
         let start_time = std::time::Instant::now();
-        let pb = ProgressBar::new_spinner();
-        pb.set_style(
-            ProgressStyle::default_spinner()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-                .template("{spinner:.blue} {msg}")?,
-        );
-        pb.set_message(if current_repair_context.is_some() {
-            "Analyzing error and fixing..."
-        } else {
-            "Generating command..."
-        });
-        pb.enable_steady_tick(std::time::Duration::from_millis(80));
-
         let response_result = backend
             .generate_command(history, current_repair_context.as_deref())
             .await;
@@ -322,8 +413,6 @@ async fn process_request(
 
         match response_result {
             Ok(response) => {
-                pb.finish_and_clear();
-
                 telemetry.track_event(
                     "command_generated",
                     serde_json::json!({
@@ -434,7 +523,6 @@ async fn process_request(
                 }
             }
             Err(e) => {
-                pb.finish_with_message("Generation failed");
                 telemetry.track_event(
                     "command_failed",
                     serde_json::json!({

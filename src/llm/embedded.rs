@@ -4,9 +4,11 @@ use crate::llm::{CommandResponse, LlmBackend, Message};
 use async_trait::async_trait;
 use candle_core::{Device, Tensor, quantized::gguf_file};
 use candle_transformers::generation::LogitsProcessor;
-use candle_transformers::models::quantized_llama as model;
+use candle_transformers::models::quantized_llama as llama_model;
+use candle_transformers::models::quantized_phi3 as phi3_model;
+use candle_transformers::models::quantized_qwen2 as qwen2_model;
 use hf_hub::api::sync::ApiBuilder;
-use indicatif::{ProgressBar, ProgressStyle};
+
 use once_cell::sync::OnceCell;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -16,8 +18,14 @@ use tracing::{debug, info, warn};
 // Global lazy-loaded model for REPL mode efficiency
 static LOADED_MODEL: OnceCell<Arc<LoadedModel>> = OnceCell::new();
 
+enum ModelWeights {
+    Llama(llama_model::ModelWeights),
+    Phi3(phi3_model::ModelWeights),
+    Qwen2(qwen2_model::ModelWeights),
+}
+
 struct LoadedModel {
-    model: Mutex<model::ModelWeights>,
+    model: Mutex<ModelWeights>,
     tokenizer: Tokenizer,
     device: Device,
 }
@@ -57,12 +65,12 @@ impl EmbeddedClient {
             .config
             .embedded_model
             .as_deref()
-            .unwrap_or("microsoft/Phi-3-mini-4k-instruct-gguf");
+            .unwrap_or("lmstudio-community/Llama-3.2-1B-Instruct-GGUF");
         let filename = self
             .config
             .embedded_model_file
             .as_deref()
-            .unwrap_or("Phi-3-mini-4k-instruct-q4.gguf");
+            .unwrap_or("Llama-3.2-1B-Instruct-Q4_K_M.gguf");
 
         let api = ApiBuilder::new()
             .with_progress(true)
@@ -82,21 +90,40 @@ impl EmbeddedClient {
             .config
             .embedded_model
             .as_deref()
-            .unwrap_or("microsoft/Phi-3-mini-4k-instruct-gguf");
+            .unwrap_or("lmstudio-community/Llama-3.2-1B-Instruct-GGUF");
+
         let api = ApiBuilder::new()
             .with_progress(true)
             .build()
             .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
         let repo = api.model(model_id.to_string());
-
         let tokenizer_path = match repo.get("tokenizer.json") {
             Ok(p) => p,
             Err(_) => {
-                let base_model = model_id.replace("-gguf", "");
+                // Try deriving base model name first
+                let base_model = model_id.replace("-GGUF", "").replace("-gguf", "");
                 let base_repo = api.model(base_model);
-                base_repo.get("tokenizer.json").map_err(|e| {
-                    HiShellError::LlmLoad(format!("Failed to download tokenizer: {}", e))
-                })?
+                match base_repo.get("tokenizer.json") {
+                    Ok(p) => p,
+                    Err(_) => {
+                        // Fallback to a known reliable repo for Llama 3.2 1B
+                        if model_id.to_lowercase().contains("llama-3.2-1b") {
+                            let fallback_repo =
+                                api.model("unsloth/Llama-3.2-1B-Instruct".to_string());
+                            fallback_repo.get("tokenizer.json").map_err(|e| {
+                                HiShellError::LlmLoad(format!(
+                                    "Failed to download tokenizer from all sources: {}",
+                                    e
+                                ))
+                            })?
+                        } else {
+                            return Err(HiShellError::LlmLoad(
+                                "Failed to download tokenizer from primary or base repo"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
             }
         };
 
@@ -111,26 +138,33 @@ impl EmbeddedClient {
             return Ok(Arc::clone(m));
         }
 
-        let pb = ProgressBar::new_spinner();
-        pb.set_style(
-            ProgressStyle::default_spinner()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-                .template("{spinner:.yellow} {msg}")
-                .map_err(|e| HiShellError::Config(e.to_string()))?,
-        );
-        pb.set_message("Loading model into memory...");
-        pb.enable_steady_tick(std::time::Duration::from_millis(80));
-
         let model_path = self.download_model()?;
         let device = Self::get_device()?;
+        let tokenizer = self.download_tokenizer()?;
+
+        let pb = crate::llm::create_spinner("Loading model into memory...")?;
 
         let mut file = std::fs::File::open(&model_path)?;
         let gguf = gguf_file::Content::read(&mut file)
             .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
-        let model_weights = model::ModelWeights::from_gguf(gguf, &mut file, &device)
-            .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
 
-        let tokenizer = self.download_tokenizer()?;
+        // Detect model type from GGUF metadata
+        let model_weights = if gguf.metadata.contains_key("phi3.block_count") {
+            info!("Detected Phi-3 model architecture");
+            let weights = phi3_model::ModelWeights::from_gguf(false, gguf, &mut file, &device)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+            ModelWeights::Phi3(weights)
+        } else if gguf.metadata.contains_key("qwen2.block_count") {
+            info!("Detected Qwen2 model architecture");
+            let weights = qwen2_model::ModelWeights::from_gguf(gguf, &mut file, &device)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+            ModelWeights::Qwen2(weights)
+        } else {
+            info!("Detected Llama model architecture");
+            let weights = llama_model::ModelWeights::from_gguf(gguf, &mut file, &device)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+            ModelWeights::Llama(weights)
+        };
 
         pb.finish_and_clear();
         info!("Model loaded successfully on {:?}", device);
@@ -158,7 +192,7 @@ impl EmbeddedClient {
             .map_err(|e| HiShellError::Parsing(format!("Tokenization failed: {}", e)))?;
 
         let input_ids = tokens.get_ids();
-        let mut all_tokens = input_ids.to_vec();
+        let mut generated_tokens = Vec::new();
 
         let mut logits_processor = LogitsProcessor::new(42, Some(0.7), Some(0.9));
         let mut model = loaded
@@ -166,35 +200,142 @@ impl EmbeddedClient {
             .lock()
             .map_err(|e| HiShellError::LlmLoad(format!("Model lock failed: {}", e)))?;
 
-        debug!("Starting token generation...");
-        for _ in 0..max_tokens {
-            let input = Tensor::new(&all_tokens[..], &loaded.device)
+        debug!(
+            "Starting token generation for prompt length {}...",
+            input_ids.len()
+        );
+
+        let mut pos = 0;
+        let mut next_token;
+
+        // Determine EOS tokens based on model type
+        let eos_tokens: Vec<u32> = match &*model {
+            ModelWeights::Phi3(_) => {
+                // Phi-3 stop tokens: <|end|>=32007, <|endoftext|>=32000
+                vec![2, 32000, 32007]
+            }
+            ModelWeights::Qwen2(_) => {
+                // Qwen2 stop tokens: <|endoftext|>=151643, <|im_end|>=151645
+                vec![2, 151643, 151645]
+            }
+            ModelWeights::Llama(_) => {
+                // Llama 3/3.x Stop tokens: <|end_of_text|>=128000/1, <|eot_id|>=128009
+                vec![2, 128000, 128001, 128009]
+            }
+        };
+
+        // Process the prompt in one go
+        {
+            let input = Tensor::new(input_ids, &loaded.device)
                 .map_err(|e| HiShellError::LlmLoad(e.to_string()))?
                 .unsqueeze(0)
                 .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
-            let logits = model
-                .forward(&input, all_tokens.len())
-                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+            let logits = match &mut *model {
+                ModelWeights::Llama(llama) => llama.forward(&input, pos),
+                ModelWeights::Phi3(phi3) => phi3.forward(&input, pos),
+                ModelWeights::Qwen2(qwen2) => qwen2.forward(&input, pos),
+            }
+            .map_err(|e| HiShellError::LlmLoad(format!("Forward pass failed: {}", e)))?;
             let logits = logits
                 .squeeze(0)
                 .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
-            let next_token = logits_processor
+
+            next_token = logits_processor
                 .sample(&logits)
                 .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
 
-            all_tokens.push(next_token);
+            generated_tokens.push(next_token);
+            pos += input_ids.len();
+        }
 
-            if next_token == 2 || next_token == 32000 || next_token == 32007 {
+        // Generate subsequent tokens
+        for _ in 0..max_tokens {
+            if eos_tokens.contains(&next_token) {
                 break;
             }
+
+            let input = Tensor::new(&[next_token], &loaded.device)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?
+                .unsqueeze(0)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+
+            let logits = match &mut *model {
+                ModelWeights::Llama(llama) => llama.forward(&input, pos),
+                ModelWeights::Phi3(phi3) => phi3.forward(&input, pos),
+                ModelWeights::Qwen2(qwen2) => qwen2.forward(&input, pos),
+            }
+            .map_err(|e| HiShellError::LlmLoad(format!("Forward pass failed: {}", e)))?;
+            let logits = logits
+                .squeeze(0)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+
+            next_token = logits_processor
+                .sample(&logits)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+
+            generated_tokens.push(next_token);
+            pos += 1;
         }
 
         let output = loaded
             .tokenizer
-            .decode(&all_tokens[input_ids.len()..], true)
+            .decode(&generated_tokens, true)
             .map_err(|e| HiShellError::Parsing(format!("Decoding failed: {}", e)))?;
 
         Ok(output)
+    }
+
+    pub fn list_downloaded_models() -> Result<Vec<(String, u64)>> {
+        let base_dirs = directories::BaseDirs::new().ok_or_else(|| {
+            HiShellError::Config("Could not determine home directory".to_string())
+        })?;
+        let cache_path = base_dirs.home_dir().join(".cache/huggingface/hub");
+
+        if !cache_path.exists() {
+            return Ok(vec![]);
+        }
+
+        let mut models = Vec::new();
+        for entry in std::fs::read_dir(cache_path)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("models--") {
+                let display_name = name.replace("models--", "").replace("--", "/");
+
+                // Simple size calculation (recursive)
+                let size = Self::get_dir_size(&entry.path())?;
+                models.push((display_name, size));
+            }
+        }
+        Ok(models)
+    }
+
+    fn get_dir_size(path: &std::path::Path) -> Result<u64> {
+        let mut size = 0;
+        if path.is_file() {
+            size += path.metadata()?.len();
+        } else if path.is_dir() {
+            for entry in std::fs::read_dir(path)? {
+                size += Self::get_dir_size(&entry?.path())?;
+            }
+        }
+        Ok(size)
+    }
+
+    pub fn delete_model(display_name: &str) -> Result<()> {
+        let internal_name = format!("models--{}", display_name.replace("/", "--"));
+        let base_dirs = directories::BaseDirs::new().ok_or_else(|| {
+            HiShellError::Config("Could not determine home directory".to_string())
+        })?;
+        let cache_path = base_dirs
+            .home_dir()
+            .join(".cache/huggingface/hub")
+            .join(internal_name);
+
+        if cache_path.exists() {
+            std::fs::remove_dir_all(cache_path)?;
+        }
+        Ok(())
     }
 }
 
@@ -205,8 +346,14 @@ impl LlmBackend for EmbeddedClient {
         messages: &[Message],
         repair_context: Option<&str>,
     ) -> Result<CommandResponse> {
-        let loaded = self.load_or_get_model()?;
         let system_prompt = crate::llm::get_system_prompt(repair_context);
+        let loaded = self.load_or_get_model()?;
+
+        let pb = crate::llm::create_spinner(if repair_context.is_some() {
+            "Analyzing error and fixing..."
+        } else {
+            "Generating command..."
+        })?;
 
         let mut prompt = format!("<|system|>\n{}\n<|end|>\n", system_prompt);
         for msg in messages {
@@ -230,6 +377,7 @@ impl LlmBackend for EmbeddedClient {
         debug!("Internal prompt for embedded model: {}", prompt);
         let raw_response = self.generate_text(&loaded, &prompt, 256)?;
 
+        pb.finish_and_clear();
         crate::llm::parse_llm_response(&raw_response)
     }
 }

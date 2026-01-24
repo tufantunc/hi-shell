@@ -1,5 +1,6 @@
 use crate::error::{HiShellError, Result};
 use async_trait::async_trait;
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 
 pub mod cloud;
@@ -117,26 +118,128 @@ pub fn parse_llm_response(content: &str) -> Result<CommandResponse> {
     let clean = content.replace("```json", "").replace("```", "");
     let clean = clean.trim();
 
-    // 2. Extract content between first { and last }
-    let json_str = if let (Some(start), Some(end)) = (clean.find('{'), clean.rfind('}')) {
-        &clean[start..=end]
+    // 2. Extract content of the FIRST JSON object found
+    let json_str = if let Some(start) = clean.find('{') {
+        // Find the matching closing brace using brace counting
+        let mut depth = 0;
+        let mut end_pos = start;
+        for (i, c) in clean[start..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end_pos = start + i;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        &clean[start..=end_pos]
     } else {
         clean
     };
 
-    // 3. Attempt to fix common escape errors (e.g. unescaped backslashes in paths)
-    // This is a naive fix: replace single backslashes not followed by valid escape chars
-    // However, it's safer to just try parsing first.
-    match serde_json::from_str::<CommandResponse>(json_str) {
-        Ok(res) => Ok(res),
-        Err(e) => {
-            // If it fails with an escape error, try a simple regex-based escaping of backslashes
-            // only if they are not already part of a valid escape sequence.
-            // For now, let's just return the error but with better context.
-            Err(HiShellError::Parsing(format!(
-                "JSON Parse Error: {}. Raw content: {}",
-                e, json_str
-            )))
+    // 3. Try parsing directly first
+    if let Ok(res) = serde_json::from_str::<CommandResponse>(json_str) {
+        return Ok(res);
+    }
+
+    // 4. Try to extract command field directly with regex-like parsing
+    if let Some(cmd) = extract_field_value(json_str, "command") {
+        let explanation = extract_field_value(json_str, "explanation");
+        let is_dangerous = extract_field_value(json_str, "is_dangerous")
+            .map(|s| s.to_lowercase() == "true")
+            .unwrap_or(false);
+
+        return Ok(CommandResponse {
+            command: cmd,
+            explanation,
+            dangerous: is_dangerous,
+        });
+    }
+
+    // 5. Fallback: try to find any quoted string that looks like a command
+    if let Some(cmd) = extract_field_value(json_str, "answer") {
+        return Ok(CommandResponse {
+            command: cmd,
+            explanation: None,
+            dangerous: false,
+        });
+    }
+
+    Err(HiShellError::Parsing(format!(
+        "Could not parse LLM response. Raw content: {}",
+        json_str
+    )))
+}
+
+/// Creates a styled spinner progress bar for LLM operations
+pub fn create_spinner(message: &'static str) -> Result<ProgressBar> {
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+            .template("{spinner:.blue} {msg}")
+            .map_err(|e| HiShellError::Config(e.to_string()))?,
+    );
+    pb.set_message(message);
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+    Ok(pb)
+}
+
+fn extract_field_value(json_str: &str, field: &str) -> Option<String> {
+    // Look for "field": "value" or "field" : "value" patterns
+    let search_pattern = format!(r#""{}""#, field);
+
+    if let Some(key_pos) = json_str.find(&search_pattern) {
+        let after_key = &json_str[key_pos + search_pattern.len()..];
+
+        // Skip whitespace and colon
+        let after_colon = after_key.trim_start();
+        if !after_colon.starts_with(':') {
+            return None;
+        }
+        let after_colon = after_colon[1..].trim_start();
+
+        // Check if value starts with quote
+        if !after_colon.starts_with('"') {
+            // Handle boolean/number values
+            let end = after_colon
+                .find(|c: char| c == ',' || c == '}' || c == '\n')
+                .unwrap_or(after_colon.len());
+            let value = after_colon[..end].trim();
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+            return None;
+        }
+
+        // Extract quoted string value
+        let value_start = 1; // Skip opening quote
+        let remaining = &after_colon[value_start..];
+
+        let mut chars = remaining.chars();
+        let mut value = String::new();
+        let mut escaped = false;
+
+        for c in chars.by_ref() {
+            if escaped {
+                value.push(c);
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                break;
+            } else {
+                value.push(c);
+            }
+        }
+
+        if !value.is_empty() {
+            return Some(value);
         }
     }
+    None
 }
