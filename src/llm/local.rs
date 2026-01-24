@@ -14,7 +14,9 @@ impl LocalClient {
     }
 
     pub async fn list_models(provider: &LocalProviderType, base_url: &str) -> Result<Vec<String>> {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()?;
         match provider {
             LocalProviderType::Ollama => {
                 // Ollama's tags endpoint is usually at /api/tags
@@ -90,7 +92,9 @@ impl LlmBackend for LocalClient {
 
         let model = self.config.local_model.as_deref().unwrap_or("phi3");
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()?;
         let system_prompt = crate::llm::get_system_prompt(repair_context);
 
         let res_text = match provider {

@@ -17,7 +17,9 @@ impl CloudClient {
         provider: &CloudProviderType,
         api_key: Option<&str>,
     ) -> Result<Vec<String>> {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()?;
         match provider {
             CloudProviderType::OpenRouter => {
                 let url = "https://openrouter.ai/api/v1/models";
@@ -131,7 +133,9 @@ impl LlmBackend for CloudClient {
             .as_ref()
             .ok_or_else(|| anyhow!("API key not configured"))?;
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()?;
         let system_prompt = crate::llm::get_system_prompt(repair_context);
 
         let (url, body) = match provider {
@@ -300,7 +304,13 @@ impl LlmBackend for CloudClient {
         let content = match provider {
             CloudProviderType::OpenRouter => json["choices"][0]["message"]["content"]
                 .as_str()
-                .ok_or_else(|| anyhow!("Failed to parse OpenRouter response"))?
+                .ok_or_else(|| {
+                    if let Some(err) = json["error"]["message"].as_str() {
+                        anyhow!("OpenRouter API Error: {}", err)
+                    } else {
+                        anyhow!("Failed to parse OpenRouter response. Raw: {}", json)
+                    }
+                })?
                 .to_string(),
             CloudProviderType::Gemini => json["candidates"][0]["content"]["parts"][0]["text"]
                 .as_str()
@@ -313,7 +323,13 @@ impl LlmBackend for CloudClient {
             CloudProviderType::OpenAI | CloudProviderType::Custom => json["choices"][0]["message"]
                 ["content"]
                 .as_str()
-                .ok_or_else(|| anyhow!("Failed to parse response"))?
+                .ok_or_else(|| {
+                    if let Some(err) = json["error"]["message"].as_str() {
+                        anyhow!("API Error: {}", err)
+                    } else {
+                        anyhow!("Failed to parse response. Raw: {}", json)
+                    }
+                })?
                 .to_string(),
         };
 

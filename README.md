@@ -4,6 +4,16 @@
 
 `hi-shell` helps you bridge the gap between "what I want to do" and "how do I write that command?". Whether you're a terminal veteran or a newcomer, `hi-shell` provides a fast, AI-powered way to generate and execute commands safely.
 
+## Should be test before 1.0.0 release:
+
+- [ ] embedded models
+- [ ] local models
+- [ ] cloud models (only tested openrouter)
+- [x] interactive mode
+- [x] one-shot mode
+- [x] safety features
+- [x] telemetry
+
 ## ✨ Features
 
 - **Multi-LLM Support**:
