@@ -1,15 +1,11 @@
-mod config;
-mod llm;
-mod telemetry;
-
-use crate::config::{CloudProviderType, Config, LlmProvider, LocalProviderType};
-use crate::llm::{LlmBackend, cloud::CloudClient, embedded::EmbeddedClient, local::LocalClient};
-use crate::telemetry::Telemetry;
 use anyhow::Result;
 use atty::Stream;
 use clap::Parser;
 use colored::*;
 use dialoguer::{Confirm, FuzzySelect, Input, Select};
+use hi_shell::config::{CloudProviderType, Config, LlmProvider, LocalProviderType};
+use hi_shell::llm::{LlmBackend, cloud::CloudClient, embedded::EmbeddedClient, local::LocalClient};
+use hi_shell::telemetry::Telemetry;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::io::{self, Read, Write};
 
@@ -269,13 +265,13 @@ async fn process_request(
     request: &str,
     config: &Config,
     telemetry: &Telemetry,
-    history: &mut Vec<crate::llm::Message>,
+    history: &mut Vec<hi_shell::llm::Message>,
 ) -> Result<()> {
     let provider_name = format!("{:?}", config.llm_provider);
 
     // Add user request to history if it's not a repair turn
-    history.push(crate::llm::Message {
-        role: crate::llm::Role::User,
+    history.push(hi_shell::llm::Message {
+        role: hi_shell::llm::Role::User,
         content: request.to_string(),
     });
 
@@ -325,8 +321,8 @@ async fn process_request(
                 );
 
                 // Add assistant response to history
-                history.push(crate::llm::Message {
-                    role: crate::llm::Role::Assistant,
+                history.push(hi_shell::llm::Message {
+                    role: hi_shell::llm::Role::Assistant,
                     content: serde_json::to_string(&response)?,
                 });
 
@@ -382,8 +378,8 @@ async fn process_request(
                     output.clone()
                 };
 
-                history.push(crate::llm::Message {
-                    role: crate::llm::Role::System,
+                history.push(hi_shell::llm::Message {
+                    role: hi_shell::llm::Role::System,
                     content: truncated_output,
                 });
 
