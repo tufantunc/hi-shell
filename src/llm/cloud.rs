@@ -114,7 +114,11 @@ impl CloudClient {
 
 #[async_trait]
 impl LlmBackend for CloudClient {
-    async fn generate_command(&self, messages: &[Message]) -> Result<CommandResponse> {
+    async fn generate_command(
+        &self,
+        messages: &[Message],
+        repair_context: Option<&str>,
+    ) -> Result<CommandResponse> {
         let provider = self
             .config
             .cloud_provider
@@ -128,7 +132,7 @@ impl LlmBackend for CloudClient {
             .ok_or_else(|| anyhow!("API key not configured"))?;
 
         let client = reqwest::Client::new();
-        let system_prompt = crate::llm::get_system_prompt();
+        let system_prompt = crate::llm::get_system_prompt(repair_context);
 
         let (url, body) = match provider {
             CloudProviderType::OpenRouter => {

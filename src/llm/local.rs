@@ -71,7 +71,11 @@ impl LocalClient {
 
 #[async_trait]
 impl LlmBackend for LocalClient {
-    async fn generate_command(&self, messages: &[Message]) -> Result<CommandResponse> {
+    async fn generate_command(
+        &self,
+        messages: &[Message],
+        repair_context: Option<&str>,
+    ) -> Result<CommandResponse> {
         let provider = self
             .config
             .local_provider
@@ -87,7 +91,7 @@ impl LlmBackend for LocalClient {
         let model = self.config.local_model.as_deref().unwrap_or("phi3");
 
         let client = reqwest::Client::new();
-        let system_prompt = crate::llm::get_system_prompt();
+        let system_prompt = crate::llm::get_system_prompt(repair_context);
 
         let res_text = match provider {
             LocalProviderType::Ollama => {

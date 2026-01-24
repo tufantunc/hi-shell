@@ -11,7 +11,7 @@ use clap::Parser;
 use colored::*;
 use dialoguer::{Confirm, FuzzySelect, Input, Select};
 use indicatif::{ProgressBar, ProgressStyle};
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 
 #[derive(Parser, Debug)]
 #[command(name = "hi-shell")]
@@ -271,23 +271,13 @@ async fn process_request(
     telemetry: &Telemetry,
     history: &mut Vec<crate::llm::Message>,
 ) -> Result<()> {
-    let start_time = std::time::Instant::now();
     let provider_name = format!("{:?}", config.llm_provider);
 
-    // Add user request to history
+    // Add user request to history if it's not a repair turn
     history.push(crate::llm::Message {
         role: crate::llm::Role::User,
         content: request.to_string(),
     });
-
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-            .template("{spinner:.blue} {msg}")?,
-    );
-    pb.set_message("Generating command...");
-    pb.enable_steady_tick(std::time::Duration::from_millis(80));
 
     let backend: Box<dyn LlmBackend> = match config.llm_provider {
         LlmProvider::Embedded => {
@@ -297,113 +287,158 @@ async fn process_request(
         LlmProvider::Cloud => Box::new(CloudClient::new(config.clone())) as Box<dyn LlmBackend>,
     };
 
-    let response_result = backend.generate_command(history).await;
-    let latency_ms = start_time.elapsed().as_millis() as u64;
+    let mut current_repair_context: Option<String> = None;
 
-    match response_result {
-        Ok(response) => {
-            pb.finish_and_clear();
+    loop {
+        let start_time = std::time::Instant::now();
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+                .template("{spinner:.blue} {msg}")?,
+        );
+        pb.set_message(if current_repair_context.is_some() {
+            "Analyzing error and fixing..."
+        } else {
+            "Generating command..."
+        });
+        pb.enable_steady_tick(std::time::Duration::from_millis(80));
 
-            telemetry.track_event(
-                "command_generated",
-                serde_json::json!({
-                    "provider": provider_name,
-                    "latency_ms": latency_ms,
-                    "dangerous": response.dangerous,
-                    "success": true
-                }),
-            );
+        let response_result = backend
+            .generate_command(history, current_repair_context.as_deref())
+            .await;
+        let latency_ms = start_time.elapsed().as_millis() as u64;
 
-            // Add assistant response to history
-            // We store the serialized successful response to keep it consistent for next turns
-            history.push(crate::llm::Message {
-                role: crate::llm::Role::Assistant,
-                content: serde_json::to_string(&response)?,
-            });
+        match response_result {
+            Ok(response) => {
+                pb.finish_and_clear();
 
-            // \x1B[2K clears the entire line, \r moves cursor to start
-            println!("\x1B[2K\r{} Proposed command:", "✔".green().bold());
-
-            // Render command in a boxed style
-            let cmd = response.command.trim();
-            let width = cmd.len() + 4;
-            let border = "═".repeat(width);
-            println!("  ╔{}╗", border);
-            println!("  ║  {}  ║", cmd.bold().cyan());
-            println!("  ╚{}╝", border);
-
-            if let Some(explanation) = &response.explanation {
-                println!("\n{} {}", "💡".yellow(), explanation.italic());
-            }
-
-            if response.dangerous {
-                println!(
-                    "\n{} {}",
-                    "⚠️  WARNING:".red().bold(),
-                    "This command is marked as dangerous!".red()
+                telemetry.track_event(
+                    "command_generated",
+                    serde_json::json!({
+                        "provider": provider_name,
+                        "latency_ms": latency_ms,
+                        "dangerous": response.dangerous,
+                        "success": true,
+                        "is_repair": current_repair_context.is_some()
+                    }),
                 );
-                if !Confirm::new()
-                    .with_prompt("Do you definitely want to execute this?")
-                    .default(false)
-                    .interact()?
-                {
+
+                // Add assistant response to history
+                history.push(crate::llm::Message {
+                    role: crate::llm::Role::Assistant,
+                    content: serde_json::to_string(&response)?,
+                });
+
+                println!(
+                    "\x1B[2K\r{} Proposed command:",
+                    if current_repair_context.is_some() {
+                        "🔧".yellow()
+                    } else {
+                        "✔".green().bold()
+                    }
+                );
+
+                let cmd = response.command.trim();
+                let width = cmd.len() + 4;
+                let border = "═".repeat(width);
+                println!("  ╔{}╗", border);
+                println!("  ║  {}  ║", cmd.bold().cyan());
+                println!("  ╚{}╝", border);
+
+                if let Some(explanation) = &response.explanation {
+                    println!("\n{} {}", "💡".yellow(), explanation.italic());
+                }
+
+                if response.dangerous {
+                    println!(
+                        "\n{} {}",
+                        "⚠️  WARNING:".red().bold(),
+                        "This command is marked as dangerous!".red()
+                    );
+                    if !Confirm::new()
+                        .with_prompt("Do you definitely want to execute this?")
+                        .default(false)
+                        .interact()?
+                    {
+                        telemetry.track_event(
+                            "command_aborted",
+                            serde_json::json!({
+                                "reason": "dangerous_confirmation_rejected"
+                            }),
+                        );
+                        return Ok(());
+                    }
+                } else {
+                    println!("\n{} Executing...", "➜".blue());
+                }
+
+                let (output, success) = execute_command(&response.command)?;
+
+                // Add command output to history
+                let truncated_output = if output.len() > 1000 {
+                    format!("{}... (truncated)", &output[..1000])
+                } else {
+                    output.clone()
+                };
+
+                history.push(crate::llm::Message {
+                    role: crate::llm::Role::System,
+                    content: truncated_output,
+                });
+
+                if history.len() > 30 {
+                    history.drain(0..(history.len() - 30));
+                }
+
+                if success {
                     telemetry.track_event(
-                        "command_aborted",
+                        "command_executed",
                         serde_json::json!({
-                            "reason": "dangerous_confirmation_rejected"
+                            "provider": provider_name,
+                            "success": true
                         }),
                     );
                     return Ok(());
+                } else {
+                    telemetry.track_event(
+                        "command_executed",
+                        serde_json::json!({
+                            "provider": provider_name,
+                            "success": false
+                        }),
+                    );
+
+                    println!("\n{} {}", "❌".red(), "Command failed.".red().bold());
+                    if Confirm::new()
+                        .with_prompt("Would you like me to try and fix this error?")
+                        .default(true)
+                        .interact()?
+                    {
+                        current_repair_context = Some(output);
+                        continue;
+                    } else {
+                        return Ok(());
+                    }
                 }
-            } else {
-                println!("\n{} Executing safely...", "➜".blue());
             }
-
-            let output = execute_command(&response.command)?;
-
-            // Add command output to history
-            // Truncate output to avoid context overflow (e.g. 1000 chars)
-            let truncated_output = if output.len() > 1000 {
-                format!("{}... (truncated)", &output[..1000])
-            } else {
-                output
-            };
-
-            history.push(crate::llm::Message {
-                role: crate::llm::Role::System,
-                content: truncated_output,
-            });
-
-            // Keep history limited to last 10 interactions (approx 3 messages per interaction)
-            if history.len() > 30 {
-                history.drain(0..(history.len() - 30));
+            Err(e) => {
+                pb.finish_with_message("Generation failed");
+                telemetry.track_event(
+                    "command_failed",
+                    serde_json::json!({
+                        "provider": provider_name,
+                        "latency_ms": latency_ms,
+                        "error": e.to_string()
+                    }),
+                );
+                return Err(e);
             }
-
-            telemetry.track_event(
-                "command_executed",
-                serde_json::json!({
-                    "provider": provider_name
-                }),
-            );
-
-            Ok(())
-        }
-        Err(e) => {
-            pb.finish_with_message("Generation failed");
-            telemetry.track_event(
-                "command_failed",
-                serde_json::json!({
-                    "provider": provider_name,
-                    "latency_ms": latency_ms,
-                    "error": e.to_string()
-                }),
-            );
-            Err(e)
         }
     }
 }
 
-fn execute_command(cmd: &str) -> Result<String> {
+fn execute_command(cmd: &str) -> Result<(String, bool)> {
     let output = std::process::Command::new("sh")
         .arg("-c")
         .arg(cmd)
@@ -416,10 +451,12 @@ fn execute_command(cmd: &str) -> Result<String> {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if !stdout.is_empty() {
-        println!("{}", stdout);
+        print!("{}", stdout);
+        io::stdout().flush()?;
     }
     if !stderr.is_empty() {
-        eprintln!("{}", stderr);
+        eprint!("{}", stderr);
+        io::stderr().flush()?;
     }
 
     let mut combined = stdout;
@@ -428,7 +465,7 @@ fn execute_command(cmd: &str) -> Result<String> {
         combined.push_str(&stderr);
     }
 
-    Ok(combined)
+    Ok((combined, output.status.success()))
 }
 
 async fn run_repl(config: &Config, telemetry: &Telemetry) -> Result<()> {

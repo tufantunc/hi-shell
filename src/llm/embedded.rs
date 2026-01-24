@@ -185,9 +185,13 @@ impl EmbeddedClient {
 
 #[async_trait]
 impl LlmBackend for EmbeddedClient {
-    async fn generate_command(&self, messages: &[Message]) -> Result<CommandResponse> {
+    async fn generate_command(
+        &self,
+        messages: &[Message],
+        repair_context: Option<&str>,
+    ) -> Result<CommandResponse> {
         let loaded = self.load_or_get_model()?;
-        let system_prompt = crate::llm::get_system_prompt();
+        let system_prompt = crate::llm::get_system_prompt(repair_context);
 
         let mut prompt = format!("<|system|>\n{}\n<|end|>\n", system_prompt);
         for msg in messages {

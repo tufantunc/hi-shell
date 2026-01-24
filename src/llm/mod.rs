@@ -28,7 +28,11 @@ pub struct CommandResponse {
 
 #[async_trait]
 pub trait LlmBackend: Send + Sync {
-    async fn generate_command(&self, messages: &[Message]) -> Result<CommandResponse>;
+    async fn generate_command(
+        &self,
+        messages: &[Message],
+        repair_context: Option<&str>,
+    ) -> Result<CommandResponse>;
 }
 
 pub fn get_system_info() -> String {
@@ -39,15 +43,32 @@ pub fn get_system_info() -> String {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| ".".to_string());
 
+    let mut files_list = String::new();
+    if let Ok(entries) = std::fs::read_dir(&cwd) {
+        let files: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .map(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                if e.path().is_dir() {
+                    format!("{}/", name)
+                } else {
+                    name
+                }
+            })
+            .take(50) // Limit to avoid token bloat
+            .collect();
+        files_list = files.join(", ");
+    }
+
     format!(
-        "Operating System: {} ({})\nShell: {}\nCurrent Working Directory: {}",
-        os, arch, shell, cwd
+        "Operating System: {} ({})\nShell: {}\nCurrent Working Directory: {}\nFiles in CWD: {}",
+        os, arch, shell, cwd, files_list
     )
 }
 
-pub fn get_system_prompt() -> String {
+pub fn get_system_prompt(repair_context: Option<&str>) -> String {
     let system_info = get_system_info();
-    format!(
+    let mut prompt = format!(
         r#"You are a terminal command generator. You must response with a valid JSON object only. No markdown formatting.
 
 COMPATIBILITY RULES:
@@ -68,7 +89,26 @@ Schema:
   "dangerous": boolean (true if destructive like rm, dd, mkfs, or system modification, else false)
 }}"#,
         system_info
-    )
+    );
+
+    if let Some(repair) = repair_context {
+        prompt.push_str(&format!(
+            r#"
+
+IMPORTANT: The previous command failed with this error: "{}"
+
+STRICT REPAIR RULES:
+1. DO NOT suggest the same failing command again.
+2. Analyze the error carefully. If it's a "No such file" error:
+   - Check the "Files in CWD" list above for similar names or typos.
+   - Suggest a command using the actual existing file name if you find a match.
+3. If it's a "command not found" error, suggest how to install it.
+4. If you are unsure, suggest a command to help diagnose the issue (e.g., list files, check permissions) but explain this clearly."#,
+            repair
+        ));
+    }
+
+    prompt
 }
 
 /// Helper to clean and parse LLM JSON responses that might be slightly malformed.
