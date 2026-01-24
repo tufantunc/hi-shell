@@ -189,14 +189,31 @@ async fn run_init() -> Result<()> {
             config.llm_provider = LlmProvider::Cloud;
             let cloud_type_idx = Select::new()
                 .with_prompt("Choose cloud provider")
-                .items(&["OpenRouter", "Gemini", "Anthropic"])
+                .items(&[
+                    "OpenRouter",
+                    "Gemini",
+                    "Anthropic",
+                    "OpenAI",
+                    "Custom (OpenAI-compatible)",
+                ])
                 .interact()?;
 
             config.cloud_provider = Some(match cloud_type_idx {
                 0 => CloudProviderType::OpenRouter,
                 1 => CloudProviderType::Gemini,
-                _ => CloudProviderType::Anthropic,
+                2 => CloudProviderType::Anthropic,
+                3 => CloudProviderType::OpenAI,
+                4 => CloudProviderType::Custom,
+                _ => unreachable!(), // Should not happen with `Select`
             });
+
+            if config.cloud_provider == Some(CloudProviderType::Custom) {
+                config.cloud_custom_url = Some(
+                    Input::new()
+                        .with_prompt("API Base URL (e.g. https://api.openai.com/v1)")
+                        .interact_text()?,
+                );
+            }
 
             config.api_key = Some(
                 Input::<String>::new()

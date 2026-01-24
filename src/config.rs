@@ -22,6 +22,8 @@ pub enum CloudProviderType {
     OpenRouter,
     Gemini,
     Anthropic,
+    OpenAI,
+    Custom,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -36,6 +38,7 @@ pub struct Config {
     pub local_model: Option<String>,
     pub cloud_provider: Option<CloudProviderType>,
     pub cloud_model: Option<String>,
+    pub cloud_custom_url: Option<String>,
     pub api_key: Option<String>,
     pub telemetry_enabled: bool,
 }
@@ -52,6 +55,7 @@ impl Default for Config {
             local_model: None,
             cloud_provider: None,
             cloud_model: Some("microsoft/phi-3-mini-4k-instruct".to_string()),
+            cloud_custom_url: None,
             api_key: None,
             telemetry_enabled: false,
         }

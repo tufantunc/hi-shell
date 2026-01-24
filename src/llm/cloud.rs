@@ -81,6 +81,33 @@ impl CloudClient {
                     .collect();
                 Ok(models)
             }
+            CloudProviderType::OpenAI => {
+                let api_key =
+                    api_key.ok_or_else(|| anyhow!("API key required to list OpenAI models"))?;
+                let url = "https://api.openai.com/v1/models";
+                let res = client
+                    .get(url)
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .send()
+                    .await?;
+                if !res.status().is_success() {
+                    return Err(anyhow!("Failed to fetch OpenAI models"));
+                }
+                let json: serde_json::Value = res.json().await?;
+                let models = json["data"]
+                    .as_array()
+                    .ok_or_else(|| anyhow!("Unexpected response from OpenAI"))?
+                    .iter()
+                    .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                    .collect();
+                Ok(models)
+            }
+            CloudProviderType::Custom => {
+                // Listing models for custom provider is tricky without the URL in this static method
+                // We'll return an empty list for now or just an error if we can't do it.
+                // However, the caller usually has the config.
+                Ok(vec![])
+            }
         }
     }
 }
@@ -188,11 +215,68 @@ impl LlmBackend for CloudClient {
                 });
                 (url.to_string(), body)
             }
+            CloudProviderType::OpenAI => {
+                let url = "https://api.openai.com/v1/chat/completions";
+                let model = self.config.cloud_model.as_deref().unwrap_or("gpt-4o");
+
+                let mut api_messages = vec![json!({"role": "system", "content": system_prompt})];
+                for msg in messages {
+                    let role = match msg.role {
+                        crate::llm::Role::System => "user",
+                        crate::llm::Role::User => "user",
+                        crate::llm::Role::Assistant => "assistant",
+                    };
+                    api_messages.push(json!({"role": role, "content": msg.content}));
+                }
+
+                let body = json!({
+                    "model": model,
+                    "messages": api_messages
+                });
+                (url.to_string(), body)
+            }
+            CloudProviderType::Custom => {
+                let base_url = self
+                    .config
+                    .cloud_custom_url
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Custom cloud URL not configured"))?;
+
+                let url = if base_url.ends_with('/') {
+                    format!("{}chat/completions", base_url)
+                } else {
+                    format!("{}/chat/completions", base_url)
+                };
+                let model = self
+                    .config
+                    .cloud_model
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("Cloud model not configured"))?;
+
+                let mut api_messages = vec![json!({"role": "system", "content": system_prompt})];
+                for msg in messages {
+                    let role = match msg.role {
+                        crate::llm::Role::System => "user",
+                        crate::llm::Role::User => "user",
+                        crate::llm::Role::Assistant => "assistant",
+                    };
+                    api_messages.push(json!({"role": role, "content": msg.content}));
+                }
+
+                let body = json!({
+                    "model": model,
+                    "messages": api_messages
+                });
+                (url.to_string(), body)
+            }
         };
 
         let mut request = client.post(&url);
 
-        if *provider == CloudProviderType::OpenRouter {
+        if *provider == CloudProviderType::OpenRouter
+            || *provider == CloudProviderType::Custom
+            || *provider == CloudProviderType::OpenAI
+        {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         } else if *provider == CloudProviderType::Anthropic {
             request = request
@@ -221,6 +305,11 @@ impl LlmBackend for CloudClient {
             CloudProviderType::Anthropic => json["content"][0]["text"]
                 .as_str()
                 .ok_or_else(|| anyhow!("Failed to parse Anthropic response"))?
+                .to_string(),
+            CloudProviderType::OpenAI | CloudProviderType::Custom => json["choices"][0]["message"]
+                ["content"]
+                .as_str()
+                .ok_or_else(|| anyhow!("Failed to parse response"))?
                 .to_string(),
         };
 
