@@ -159,11 +159,24 @@ impl EmbeddedClient {
             let weights = qwen2_model::ModelWeights::from_gguf(gguf, &mut file, &device)
                 .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
             ModelWeights::Qwen2(weights)
-        } else {
+        } else if gguf.metadata.contains_key("llama.block_count")
+            || gguf.metadata.contains_key("llama.attention.head_count")
+        {
             info!("Detected Llama model architecture");
             let weights = llama_model::ModelWeights::from_gguf(gguf, &mut file, &device)
                 .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
             ModelWeights::Llama(weights)
+        } else {
+            // Get architecture name from metadata if available
+            let arch = gguf
+                .metadata
+                .get("general.architecture")
+                .map(|v| format!("{:?}", v))
+                .unwrap_or_else(|| "unknown".to_string());
+            return Err(HiShellError::LlmLoad(format!(
+                "Unsupported model architecture: {}. Supported: Llama, Phi-3, Qwen2",
+                arch
+            )));
         };
 
         pb.finish_and_clear();
