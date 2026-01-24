@@ -30,6 +30,9 @@ struct Args {
 
     #[arg(long, help = "Do not save the model override to configuration")]
     temp: bool,
+
+    #[arg(short, long, help = "Enable verbose logging")]
+    verbose: bool,
 }
 
 #[tokio::main]
@@ -43,6 +46,18 @@ async fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     let args = Args::parse();
+
+    // Initialize tracing
+    let filter = if args.verbose {
+        "hi_shell=debug"
+    } else {
+        "hi_shell=info"
+    };
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .init();
 
     if args.init {
         run_init().await?;
@@ -428,7 +443,7 @@ async fn process_request(
                         "error": e.to_string()
                     }),
                 );
-                return Err(e);
+                return Err(e.into());
             }
         }
     }

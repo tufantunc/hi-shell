@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::{HiShellError, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -133,11 +133,10 @@ pub fn parse_llm_response(content: &str) -> Result<CommandResponse> {
             // If it fails with an escape error, try a simple regex-based escaping of backslashes
             // only if they are not already part of a valid escape sequence.
             // For now, let's just return the error but with better context.
-            Err(anyhow::anyhow!(
+            Err(HiShellError::Parsing(format!(
                 "JSON Parse Error: {}. Raw content: {}",
-                e,
-                json_str
-            ))
+                e, json_str
+            )))
         }
     }
 }

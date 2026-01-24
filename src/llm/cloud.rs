@@ -1,8 +1,9 @@
 use crate::config::{CloudProviderType, Config};
+use crate::error::{HiShellError, Result};
 use crate::llm::{CommandResponse, LlmBackend, Message};
-use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use serde_json::json;
+use tracing::{debug, info};
 
 pub struct CloudClient {
     config: Config,
@@ -20,50 +21,58 @@ impl CloudClient {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()?;
+
         match provider {
             CloudProviderType::OpenRouter => {
                 let url = "https://openrouter.ai/api/v1/models";
                 let res = client.get(url).send().await?;
                 if !res.status().is_success() {
-                    return Err(anyhow!("Failed to fetch OpenRouter models"));
+                    return Err(HiShellError::Api {
+                        provider: "OpenRouter".to_string(),
+                        message: format!("Failed to fetch models: {}", res.status()),
+                    });
                 }
                 let json: serde_json::Value = res.json().await?;
                 let models = json["data"]
                     .as_array()
-                    .ok_or_else(|| anyhow!("Unexpected response from OpenRouter"))?
+                    .ok_or_else(|| {
+                        HiShellError::Parsing("Unexpected response from OpenRouter".to_string())
+                    })?
                     .iter()
                     .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
                     .collect();
                 Ok(models)
             }
             CloudProviderType::Gemini => {
-                let api_key =
-                    api_key.ok_or_else(|| anyhow!("API key required to list Gemini models"))?;
+                let api_key = api_key.ok_or_else(|| {
+                    HiShellError::Config("API key required to list Gemini models".to_string())
+                })?;
                 let url = format!(
                     "https://generativelanguage.googleapis.com/v1beta/models?key={}",
                     api_key
                 );
                 let res = client.get(url).send().await?;
                 if !res.status().is_success() {
-                    return Err(anyhow!("Failed to fetch Gemini models"));
+                    return Err(HiShellError::Api {
+                        provider: "Gemini".to_string(),
+                        message: format!("Failed to fetch models: {}", res.status()),
+                    });
                 }
                 let json: serde_json::Value = res.json().await?;
                 let models = json["models"]
                     .as_array()
-                    .ok_or_else(|| anyhow!("Unexpected response from Gemini"))?
+                    .ok_or_else(|| {
+                        HiShellError::Parsing("Unexpected response from Gemini".to_string())
+                    })?
                     .iter()
-                    .filter_map(|m| {
-                        m["name"].as_str().map(|s| {
-                            // Gemini model names are usually 'models/gemini-1.5-flash'
-                            s.replace("models/", "")
-                        })
-                    })
+                    .filter_map(|m| m["name"].as_str().map(|s| s.replace("models/", "")))
                     .collect();
                 Ok(models)
             }
             CloudProviderType::Anthropic => {
-                let api_key =
-                    api_key.ok_or_else(|| anyhow!("API key required to list Anthropic models"))?;
+                let api_key = api_key.ok_or_else(|| {
+                    HiShellError::Config("API key required to list Anthropic models".to_string())
+                })?;
                 let url = "https://api.anthropic.com/v1/models";
                 let res = client
                     .get(url)
@@ -72,20 +81,26 @@ impl CloudClient {
                     .send()
                     .await?;
                 if !res.status().is_success() {
-                    return Err(anyhow!("Failed to fetch Anthropic models"));
+                    return Err(HiShellError::Api {
+                        provider: "Anthropic".to_string(),
+                        message: format!("Failed to fetch models: {}", res.status()),
+                    });
                 }
                 let json: serde_json::Value = res.json().await?;
                 let models = json["data"]
                     .as_array()
-                    .ok_or_else(|| anyhow!("Unexpected response from Anthropic"))?
+                    .ok_or_else(|| {
+                        HiShellError::Parsing("Unexpected response from Anthropic".to_string())
+                    })?
                     .iter()
                     .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
                     .collect();
                 Ok(models)
             }
             CloudProviderType::OpenAI => {
-                let api_key =
-                    api_key.ok_or_else(|| anyhow!("API key required to list OpenAI models"))?;
+                let api_key = api_key.ok_or_else(|| {
+                    HiShellError::Config("API key required to list OpenAI models".to_string())
+                })?;
                 let url = "https://api.openai.com/v1/models";
                 let res = client
                     .get(url)
@@ -93,23 +108,23 @@ impl CloudClient {
                     .send()
                     .await?;
                 if !res.status().is_success() {
-                    return Err(anyhow!("Failed to fetch OpenAI models"));
+                    return Err(HiShellError::Api {
+                        provider: "OpenAI".to_string(),
+                        message: format!("Failed to fetch models: {}", res.status()),
+                    });
                 }
                 let json: serde_json::Value = res.json().await?;
                 let models = json["data"]
                     .as_array()
-                    .ok_or_else(|| anyhow!("Unexpected response from OpenAI"))?
+                    .ok_or_else(|| {
+                        HiShellError::Parsing("Unexpected response from OpenAI".to_string())
+                    })?
                     .iter()
                     .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
                     .collect();
                 Ok(models)
             }
-            CloudProviderType::Custom => {
-                // Listing models for custom provider is tricky without the URL in this static method
-                // We'll return an empty list for now or just an error if we can't do it.
-                // However, the caller usually has the config.
-                Ok(vec![])
-            }
+            CloudProviderType::Custom => Ok(vec![]),
         }
     }
 }
@@ -125,13 +140,13 @@ impl LlmBackend for CloudClient {
             .config
             .cloud_provider
             .as_ref()
-            .ok_or_else(|| anyhow!("Cloud provider not configured"))?;
+            .ok_or_else(|| HiShellError::Config("Cloud provider not configured".to_string()))?;
 
         let api_key = self
             .config
             .api_key
             .as_ref()
-            .ok_or_else(|| anyhow!("API key not configured"))?;
+            .ok_or_else(|| HiShellError::Config("API key not configured".to_string()))?;
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
@@ -150,7 +165,7 @@ impl LlmBackend for CloudClient {
                 let mut api_messages = vec![json!({"role": "system", "content": system_prompt})];
                 for msg in messages {
                     let role = match msg.role {
-                        crate::llm::Role::System => "user", // OpenRouter/others might not like tool output as system
+                        crate::llm::Role::System => "user",
                         crate::llm::Role::User => "user",
                         crate::llm::Role::Assistant => "assistant",
                     };
@@ -174,7 +189,6 @@ impl LlmBackend for CloudClient {
                     model, api_key
                 );
 
-                // Gemini expects a different format, combining system prompt into the first message or instruction
                 let mut combined_prompt = format!("{}\n\nConversation History:\n", system_prompt);
                 for msg in messages {
                     let role_str = match msg.role {
@@ -244,22 +258,18 @@ impl LlmBackend for CloudClient {
                 (url.to_string(), body)
             }
             CloudProviderType::Custom => {
-                let base_url = self
-                    .config
-                    .cloud_custom_url
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("Custom cloud URL not configured"))?;
+                let base_url = self.config.cloud_custom_url.as_ref().ok_or_else(|| {
+                    HiShellError::Config("Custom cloud URL not configured".to_string())
+                })?;
 
                 let url = if base_url.ends_with('/') {
                     format!("{}chat/completions", base_url)
                 } else {
                     format!("{}/chat/completions", base_url)
                 };
-                let model = self
-                    .config
-                    .cloud_model
-                    .as_deref()
-                    .ok_or_else(|| anyhow!("Cloud model not configured"))?;
+                let model = self.config.cloud_model.as_deref().ok_or_else(|| {
+                    HiShellError::Config("Cloud model not configured".to_string())
+                })?;
 
                 let mut api_messages = vec![json!({"role": "system", "content": system_prompt})];
                 for msg in messages {
@@ -275,64 +285,66 @@ impl LlmBackend for CloudClient {
                     "model": model,
                     "messages": api_messages
                 });
-                (url.to_string(), body)
+                (url, body)
             }
         };
 
-        let mut request = client.post(&url);
-
-        if *provider == CloudProviderType::OpenRouter
+        debug!("Sending request to {} with body: {:?}", url, body);
+        let res = client.post(&url);
+        let res = if *provider == CloudProviderType::OpenRouter
             || *provider == CloudProviderType::Custom
             || *provider == CloudProviderType::OpenAI
         {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
+            res.header("Authorization", format!("Bearer {}", api_key))
         } else if *provider == CloudProviderType::Anthropic {
-            request = request
-                .header("x-api-key", api_key)
-                .header("anthropic-version", "2023-06-01");
-        }
+            res.header("x-api-key", api_key)
+                .header("anthropic-version", "2023-06-01")
+        } else {
+            res
+        };
 
-        let res = request.json(&body).send().await?;
+        let res = res.json(&body).send().await?;
 
         if !res.status().is_success() {
             let error_text = res.text().await?;
-            return Err(anyhow!("API Error: {}", error_text));
+            return Err(HiShellError::Api {
+                provider: format!("{:?}", provider),
+                message: error_text,
+            });
         }
 
         let json: serde_json::Value = res.json().await?;
+        debug!("Received JSON response: {:?}", json);
 
         let content = match provider {
             CloudProviderType::OpenRouter => json["choices"][0]["message"]["content"]
                 .as_str()
                 .ok_or_else(|| {
-                    if let Some(err) = json["error"]["message"].as_str() {
-                        anyhow!("OpenRouter API Error: {}", err)
-                    } else {
-                        anyhow!("Failed to parse OpenRouter response. Raw: {}", json)
-                    }
+                    HiShellError::Parsing(format!("Failed to parse OpenRouter response: {}", json))
                 })?
                 .to_string(),
             CloudProviderType::Gemini => json["candidates"][0]["content"]["parts"][0]["text"]
                 .as_str()
-                .ok_or_else(|| anyhow!("Failed to parse Gemini response"))?
+                .ok_or_else(|| {
+                    HiShellError::Parsing("Failed to parse Gemini response".to_string())
+                })?
                 .to_string(),
             CloudProviderType::Anthropic => json["content"][0]["text"]
                 .as_str()
-                .ok_or_else(|| anyhow!("Failed to parse Anthropic response"))?
+                .ok_or_else(|| {
+                    HiShellError::Parsing("Failed to parse Anthropic response".to_string())
+                })?
                 .to_string(),
             CloudProviderType::OpenAI | CloudProviderType::Custom => json["choices"][0]["message"]
                 ["content"]
                 .as_str()
                 .ok_or_else(|| {
-                    if let Some(err) = json["error"]["message"].as_str() {
-                        anyhow!("API Error: {}", err)
-                    } else {
-                        anyhow!("Failed to parse response. Raw: {}", json)
-                    }
+                    HiShellError::Parsing(format!("Failed to parse response: {}", json))
                 })?
                 .to_string(),
         };
 
+        info!("Command generated successfully using {:?}", provider);
         crate::llm::parse_llm_response(&content)
     }
 }

@@ -1,8 +1,9 @@
 use crate::config::{Config, LocalProviderType};
+use crate::error::{HiShellError, Result};
 use crate::llm::{CommandResponse, LlmBackend, Message};
-use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use serde_json::json;
+use tracing::{debug, info};
 
 pub struct LocalClient {
     config: Config,
@@ -17,13 +18,12 @@ impl LocalClient {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()?;
+
         match provider {
             LocalProviderType::Ollama => {
-                // Ollama's tags endpoint is usually at /api/tags
-                // The URL in config is /api/generate usually, so we need to adjust
                 let url = if base_url.ends_with("/api/generate") {
                     base_url.replace("/api/generate", "/api/tags")
-                } else if base_url.ends_with("/") {
+                } else if base_url.ends_with('/') {
                     format!("{}api/tags", base_url)
                 } else {
                     format!("{}/api/tags", base_url)
@@ -31,23 +31,27 @@ impl LocalClient {
 
                 let res = client.get(url).send().await?;
                 if !res.status().is_success() {
-                    return Err(anyhow!("Failed to list Ollama models"));
+                    return Err(HiShellError::Api {
+                        provider: "Ollama".to_string(),
+                        message: format!("Failed to list models: {}", res.status()),
+                    });
                 }
 
                 let json: serde_json::Value = res.json().await?;
                 let models = json["models"]
                     .as_array()
-                    .ok_or_else(|| anyhow!("Unexpected response from Ollama"))?
+                    .ok_or_else(|| {
+                        HiShellError::Parsing("Unexpected response from Ollama".to_string())
+                    })?
                     .iter()
                     .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
                     .collect();
                 Ok(models)
             }
             LocalProviderType::LmStudio => {
-                // LM Studio usually uses OpenAI compatible /v1/models
                 let url = if base_url.ends_with("/v1/chat/completions") {
                     base_url.replace("/v1/chat/completions", "/v1/models")
-                } else if base_url.ends_with("/") {
+                } else if base_url.ends_with('/') {
                     format!("{}v1/models", base_url)
                 } else {
                     format!("{}/v1/models", base_url)
@@ -55,13 +59,18 @@ impl LocalClient {
 
                 let res = client.get(url).send().await?;
                 if !res.status().is_success() {
-                    return Err(anyhow!("Failed to list LM Studio models"));
+                    return Err(HiShellError::Api {
+                        provider: "LM Studio".to_string(),
+                        message: format!("Failed to list models: {}", res.status()),
+                    });
                 }
 
                 let json: serde_json::Value = res.json().await?;
                 let models = json["data"]
                     .as_array()
-                    .ok_or_else(|| anyhow!("Unexpected response from LM Studio"))?
+                    .ok_or_else(|| {
+                        HiShellError::Parsing("Unexpected response from LM Studio".to_string())
+                    })?
                     .iter()
                     .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
                     .collect();
@@ -82,7 +91,7 @@ impl LlmBackend for LocalClient {
             .config
             .local_provider
             .as_ref()
-            .ok_or_else(|| anyhow!("Local provider not configured"))?;
+            .ok_or_else(|| HiShellError::Config("Local provider not configured".to_string()))?;
 
         let url = self
             .config
@@ -117,17 +126,22 @@ impl LlmBackend for LocalClient {
                     "format": "json"
                 });
 
+                debug!("Sending request to Ollama: {}", url);
                 let res = client.post(url).json(&body).send().await?;
 
                 if !res.status().is_success() {
-                    let error_text = res.text().await?;
-                    return Err(anyhow!("Ollama API Error: {}", error_text));
+                    return Err(HiShellError::Api {
+                        provider: "Ollama".to_string(),
+                        message: res.text().await?,
+                    });
                 }
 
                 let json: serde_json::Value = res.json().await?;
                 json["response"]
                     .as_str()
-                    .ok_or_else(|| anyhow!("Failed to parse response from Ollama"))?
+                    .ok_or_else(|| {
+                        HiShellError::Parsing("Failed to parse response from Ollama".to_string())
+                    })?
                     .to_string()
             }
             LocalProviderType::LmStudio => {
@@ -146,21 +160,27 @@ impl LlmBackend for LocalClient {
                     "response_format": { "type": "json_object" }
                 });
 
+                debug!("Sending request to LM Studio: {}", url);
                 let res = client.post(url).json(&body).send().await?;
 
                 if !res.status().is_success() {
-                    let error_text = res.text().await?;
-                    return Err(anyhow!("LM Studio API Error: {}", error_text));
+                    return Err(HiShellError::Api {
+                        provider: "LM Studio".to_string(),
+                        message: res.text().await?,
+                    });
                 }
 
                 let json: serde_json::Value = res.json().await?;
                 json["choices"][0]["message"]["content"]
                     .as_str()
-                    .ok_or_else(|| anyhow!("Failed to parse response from LM Studio"))?
+                    .ok_or_else(|| {
+                        HiShellError::Parsing("Failed to parse response from LM Studio".to_string())
+                    })?
                     .to_string()
             }
         };
 
+        info!("Command generated successfully using local {:?}", provider);
         crate::llm::parse_llm_response(&res_text)
     }
 }

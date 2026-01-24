@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use crate::error::{HiShellError, Result};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -64,8 +64,9 @@ impl Default for Config {
 
 impl Config {
     pub fn get_path() -> Result<PathBuf> {
-        let proj_dirs = ProjectDirs::from("com", "hi-shell", "hi-shell")
-            .context("Could not determine config directory")?;
+        let proj_dirs = ProjectDirs::from("com", "hi-shell", "hi-shell").ok_or_else(|| {
+            HiShellError::Config("Could not determine config directory".to_string())
+        })?;
         let config_dir = proj_dirs.config_dir();
         fs::create_dir_all(config_dir)?;
         Ok(config_dir.join("config.toml"))

@@ -1,20 +1,20 @@
 use crate::config::Config;
+use crate::error::{HiShellError, Result};
 use crate::llm::{CommandResponse, LlmBackend, Message};
-use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use candle_core::{Device, quantized::gguf_file};
+use candle_core::{Device, Tensor, quantized::gguf_file};
+use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::quantized_llama as model;
 use hf_hub::api::sync::ApiBuilder;
 use indicatif::{ProgressBar, ProgressStyle};
 use once_cell::sync::OnceCell;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokenizers::Tokenizer;
+use tracing::{debug, info, warn};
 
 // Global lazy-loaded model for REPL mode efficiency
 static LOADED_MODEL: OnceCell<Arc<LoadedModel>> = OnceCell::new();
-
-use std::sync::Mutex;
 
 struct LoadedModel {
     model: Mutex<model::ModelWeights>,
@@ -32,11 +32,10 @@ impl EmbeddedClient {
     }
 
     fn get_device() -> Result<Device> {
-        // Priority: Metal (macOS) -> CUDA (NVIDIA) -> CPU
         #[cfg(target_os = "macos")]
         {
             if let Ok(device) = Device::new_metal(0) {
-                eprintln!("🚀 Using Metal GPU acceleration");
+                info!("Using Metal GPU acceleration");
                 return Ok(device);
             }
         }
@@ -44,12 +43,12 @@ impl EmbeddedClient {
         #[cfg(feature = "cuda")]
         {
             if let Ok(device) = Device::new_cuda(0) {
-                eprintln!("🚀 Using CUDA GPU acceleration");
+                info!("Using CUDA GPU acceleration");
                 return Ok(device);
             }
         }
 
-        eprintln!("💻 Using CPU (no GPU acceleration available)");
+        warn!("Using CPU (no GPU acceleration available)");
         Ok(Device::Cpu)
     }
 
@@ -65,12 +64,16 @@ impl EmbeddedClient {
             .as_deref()
             .unwrap_or("Phi-3-mini-4k-instruct-q4.gguf");
 
-        let api = ApiBuilder::new().with_progress(true).build()?;
+        let api = ApiBuilder::new()
+            .with_progress(true)
+            .build()
+            .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
         let repo = api.model(model_id.to_string());
 
-        eprintln!("📦 Checking model cache for {}...", model_id);
-        let path = repo.get(filename)?;
-        eprintln!("✅ Model ready: {}", filename);
+        debug!("Checking model cache for {}...", model_id);
+        let path = repo
+            .get(filename)
+            .map_err(|e| HiShellError::LlmLoad(format!("Failed to download model: {}", e)))?;
         Ok(path)
     }
 
@@ -80,21 +83,25 @@ impl EmbeddedClient {
             .embedded_model
             .as_deref()
             .unwrap_or("microsoft/Phi-3-mini-4k-instruct-gguf");
-        let api = ApiBuilder::new().with_progress(true).build()?;
+        let api = ApiBuilder::new()
+            .with_progress(true)
+            .build()
+            .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
         let repo = api.model(model_id.to_string());
 
         let tokenizer_path = match repo.get("tokenizer.json") {
             Ok(p) => p,
             Err(_) => {
-                // Try base model without -gguf suffix
                 let base_model = model_id.replace("-gguf", "");
                 let base_repo = api.model(base_model);
-                base_repo.get("tokenizer.json")?
+                base_repo.get("tokenizer.json").map_err(|e| {
+                    HiShellError::LlmLoad(format!("Failed to download tokenizer: {}", e))
+                })?
             }
         };
 
         let tokenizer = Tokenizer::from_file(tokenizer_path)
-            .map_err(|e| anyhow!("Failed to load tokenizer: {}", e))?;
+            .map_err(|e| HiShellError::LlmLoad(format!("Failed to load tokenizer: {}", e)))?;
 
         Ok(tokenizer)
     }
@@ -108,7 +115,8 @@ impl EmbeddedClient {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-                .template("{spinner:.yellow} {msg}")?,
+                .template("{spinner:.yellow} {msg}")
+                .map_err(|e| HiShellError::Config(e.to_string()))?,
         );
         pb.set_message("Loading model into memory...");
         pb.enable_steady_tick(std::time::Duration::from_millis(80));
@@ -117,13 +125,15 @@ impl EmbeddedClient {
         let device = Self::get_device()?;
 
         let mut file = std::fs::File::open(&model_path)?;
-        let gguf = gguf_file::Content::read(&mut file)?;
-        let model_weights = model::ModelWeights::from_gguf(gguf, &mut file, &device)?;
+        let gguf = gguf_file::Content::read(&mut file)
+            .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+        let model_weights = model::ModelWeights::from_gguf(gguf, &mut file, &device)
+            .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
 
         let tokenizer = self.download_tokenizer()?;
 
         pb.finish_and_clear();
-        eprintln!("✅ Model loaded successfully");
+        info!("Model loaded successfully on {:?}", device);
 
         let loaded = Arc::new(LoadedModel {
             model: Mutex::new(model_weights),
@@ -131,7 +141,6 @@ impl EmbeddedClient {
             device,
         });
 
-        // Initialize Global State
         let _ = LOADED_MODEL.set(Arc::clone(&loaded));
 
         Ok(loaded)
@@ -143,13 +152,10 @@ impl EmbeddedClient {
         prompt: &str,
         max_tokens: usize,
     ) -> Result<String> {
-        use candle_core::Tensor;
-        use candle_transformers::generation::LogitsProcessor;
-
         let tokens = loaded
             .tokenizer
             .encode(prompt, true)
-            .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
+            .map_err(|e| HiShellError::Parsing(format!("Tokenization failed: {}", e)))?;
 
         let input_ids = tokens.get_ids();
         let mut all_tokens = input_ids.to_vec();
@@ -158,17 +164,26 @@ impl EmbeddedClient {
         let mut model = loaded
             .model
             .lock()
-            .map_err(|e| anyhow!("Model lock failed: {}", e))?;
+            .map_err(|e| HiShellError::LlmLoad(format!("Model lock failed: {}", e)))?;
 
+        debug!("Starting token generation...");
         for _ in 0..max_tokens {
-            let input = Tensor::new(&all_tokens[..], &loaded.device)?.unsqueeze(0)?;
-            let logits = model.forward(&input, all_tokens.len())?;
-            let logits = logits.squeeze(0)?;
-            let next_token = logits_processor.sample(&logits)?;
+            let input = Tensor::new(&all_tokens[..], &loaded.device)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?
+                .unsqueeze(0)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+            let logits = model
+                .forward(&input, all_tokens.len())
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+            let logits = logits
+                .squeeze(0)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
+            let next_token = logits_processor
+                .sample(&logits)
+                .map_err(|e| HiShellError::LlmLoad(e.to_string()))?;
 
             all_tokens.push(next_token);
 
-            // EOS token check (2 = EOS for Llama/Phi usually, 32000 for some others)
             if next_token == 2 || next_token == 32000 || next_token == 32007 {
                 break;
             }
@@ -177,7 +192,7 @@ impl EmbeddedClient {
         let output = loaded
             .tokenizer
             .decode(&all_tokens[input_ids.len()..], true)
-            .map_err(|e| anyhow!("Decoding failed: {}", e))?;
+            .map_err(|e| HiShellError::Parsing(format!("Decoding failed: {}", e)))?;
 
         Ok(output)
     }
@@ -203,7 +218,6 @@ impl LlmBackend for EmbeddedClient {
                     prompt.push_str(&format!("<|assistant|>\n{}\n<|end|>\n", msg.content));
                 }
                 crate::llm::Role::System => {
-                    // Treat system/tool output as user context in the chat
                     prompt.push_str(&format!(
                         "<|user|>\nPrevious Command Output: {}\n<|end|>\n",
                         msg.content
@@ -213,6 +227,7 @@ impl LlmBackend for EmbeddedClient {
         }
         prompt.push_str("<|assistant|>\n");
 
+        debug!("Internal prompt for embedded model: {}", prompt);
         let raw_response = self.generate_text(&loaded, &prompt, 256)?;
 
         crate::llm::parse_llm_response(&raw_response)
