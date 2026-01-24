@@ -1,5 +1,18 @@
 # hi-shell 🐚
 
+<p align="center">
+  <img src="small-hermit-crab-mascot.png" alt="hi-shell mascot">
+</p>
+
+<details>
+<summary>🎨 Mascot prompt (click to expand)</summary>
+
+> A cute mascot character that is a small hermit crab. Instead of a natural seashell on its back, it carries a retro-futuristic CRT terminal monitor as its shell. The screen of the monitor glows green and displays a bash prompt `user@hi-shell:~$ _` with a blinking cursor. The crab has friendly robotic claws, one is typing on a tiny keyboard integrated into the monitor base, and the other is making a "stop/safe" gesture. The crab's eyes are intelligent and glowing blue. The overall vibe is helpful, robust, and smart. Illustration style, clean lines, transparent background.
+
+</details>
+
+---
+
 👋 **hi-shell**: An intelligent terminal assistant that translates your natural language descriptions into executable bash commands.
 
 `hi-shell` helps you bridge the gap between "what I want to do" and "how do I write that command?". Whether you're a terminal veteran or a newcomer, `hi-shell` provides a fast, AI-powered way to generate and execute commands safely.
