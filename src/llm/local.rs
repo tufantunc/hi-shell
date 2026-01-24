@@ -14,6 +14,20 @@ impl LocalClient {
         Self { config }
     }
 
+    fn normalize_base_url(base_url: &str) -> String {
+        base_url.trim_end_matches('/').to_string()
+    }
+
+    fn build_ollama_url(base_url: &str, endpoint: &str) -> String {
+        let base = Self::normalize_base_url(base_url);
+        format!("{}/api/{}", base, endpoint)
+    }
+
+    fn build_lmstudio_url(base_url: &str, endpoint: &str) -> String {
+        let base = Self::normalize_base_url(base_url);
+        format!("{}/v1/{}", base, endpoint)
+    }
+
     pub async fn list_models(provider: &LocalProviderType, base_url: &str) -> Result<Vec<String>> {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
@@ -21,13 +35,7 @@ impl LocalClient {
 
         match provider {
             LocalProviderType::Ollama => {
-                let url = if base_url.ends_with("/api/generate") {
-                    base_url.replace("/api/generate", "/api/tags")
-                } else if base_url.ends_with('/') {
-                    format!("{}api/tags", base_url)
-                } else {
-                    format!("{}/api/tags", base_url)
-                };
+                let url = Self::build_ollama_url(base_url, "tags");
 
                 let res = client.get(url).send().await?;
                 if !res.status().is_success() {
@@ -49,13 +57,7 @@ impl LocalClient {
                 Ok(models)
             }
             LocalProviderType::LmStudio => {
-                let url = if base_url.ends_with("/v1/chat/completions") {
-                    base_url.replace("/v1/chat/completions", "/v1/models")
-                } else if base_url.ends_with('/') {
-                    format!("{}v1/models", base_url)
-                } else {
-                    format!("{}/v1/models", base_url)
-                };
+                let url = Self::build_lmstudio_url(base_url, "models");
 
                 let res = client.get(url).send().await?;
                 if !res.status().is_success() {
@@ -93,11 +95,11 @@ impl LlmBackend for LocalClient {
             .as_ref()
             .ok_or_else(|| HiShellError::Config("Local provider not configured".to_string()))?;
 
-        let url = self
+        let base_url = self
             .config
             .local_url
             .as_deref()
-            .unwrap_or("http://localhost:11434/api/generate");
+            .unwrap_or("http://localhost:11434");
 
         let model = self.config.local_model.as_deref().unwrap_or("phi3");
 
@@ -114,6 +116,7 @@ impl LlmBackend for LocalClient {
 
         let res_text = match provider {
             LocalProviderType::Ollama => {
+                let url = Self::build_ollama_url(base_url, "generate");
                 let mut combined_prompt = format!("System: {}\n", system_prompt);
                 for msg in messages {
                     let role_str = match msg.role {
@@ -133,7 +136,7 @@ impl LlmBackend for LocalClient {
                 });
 
                 debug!("Sending request to Ollama: {}", url);
-                let res = client.post(url).json(&body).send().await?;
+                let res = client.post(&url).json(&body).send().await?;
 
                 if !res.status().is_success() {
                     return Err(HiShellError::Api {
@@ -151,6 +154,7 @@ impl LlmBackend for LocalClient {
                     .to_string()
             }
             LocalProviderType::LmStudio => {
+                let url = Self::build_lmstudio_url(base_url, "chat/completions");
                 let mut api_messages = vec![json!({"role": "system", "content": system_prompt})];
                 for msg in messages {
                     let role = match msg.role {
@@ -163,11 +167,26 @@ impl LlmBackend for LocalClient {
                 let body = json!({
                     "model": model,
                     "messages": api_messages,
-                    "response_format": { "type": "json_object" }
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "command_response",
+                            "strict": true,
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "command": { "type": "string" },
+                                    "explanation": { "type": "string" }
+                                },
+                                "required": ["command", "explanation"],
+                                "additionalProperties": false
+                            }
+                        }
+                    }
                 });
 
                 debug!("Sending request to LM Studio: {}", url);
-                let res = client.post(url).json(&body).send().await?;
+                let res = client.post(&url).json(&body).send().await?;
 
                 if !res.status().is_success() {
                     return Err(HiShellError::Api {

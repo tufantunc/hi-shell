@@ -20,12 +20,18 @@
 ## Should be test before 1.0.0 release:
 
 - [x] embedded models
-- [ ] local models
-- [ ] cloud models (tested openrouter, gemini, custom)
+- [x] local models (tested lmstudio and ollama)
+- [ ] cloud models (tested openrouter, gemini, custom, need to test with antrophic)
 - [x] interactive mode
 - [x] one-shot mode
 - [x] safety features
 - [x] telemetry
+- [ ] release workflow works
+- [ ] cargo publish works
+- [ ] homebrew update works
+- [ ] scoop update works
+- [ ] works on linux
+- [ ] works on windows
 
 ## ✨ Features
 

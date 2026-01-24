@@ -213,12 +213,12 @@ async fn run_init() -> Result<()> {
             });
 
             let default_url = if local_type_idx == 0 {
-                "http://localhost:11434/api/generate"
+                "http://localhost:11434"
             } else {
-                "http://localhost:1234/v1/chat/completions"
+                "http://localhost:1234"
             };
             let url: String = Input::new()
-                .with_prompt("API URL")
+                .with_prompt("Base URL")
                 .default(default_url.to_string())
                 .interact_text()?;
             config.local_url = Some(url.clone());
