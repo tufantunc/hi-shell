@@ -26,7 +26,7 @@
 - [x] one-shot mode
 - [x] safety features
 - [x] telemetry
-- [ ] release workflow works
+- [x] release workflow works
 - [ ] cargo publish works
 - [ ] homebrew update works
 - [ ] scoop update works
@@ -81,6 +81,31 @@ You can download the pre-built binaries for your operating system from the [Rele
 1. Download the version corresponding to your OS (macOS, Linux, or Windows).
 2. Move the binary to a folder in your `PATH`.
 3. Run `hi-shell --init` to set up your preferred LLM provider.
+
+## 🔄 Updating
+
+### 🍏 Homebrew (macOS & Linux)
+```bash
+brew update && brew upgrade hi-shell
+```
+
+### 🪟 Scoop (Windows)
+```powershell
+scoop update hi-shell
+```
+
+### 🦀 Cargo
+```bash
+cargo install hi-shell
+# OR
+cargo binstall hi-shell
+```
+
+### ⚡ Quick Install Script
+Re-run the install script to get the latest version:
+```bash
+curl -sSL https://raw.githubusercontent.com/tufantunc/hi-shell/main/install.sh | bash
+```
 
 ## 🛠 Development
 

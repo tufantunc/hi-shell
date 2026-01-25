@@ -538,6 +538,15 @@ async fn process_request(
 }
 
 fn execute_command(cmd: &str) -> Result<(String, bool)> {
+    #[cfg(windows)]
+    let output = std::process::Command::new("cmd")
+        .args(["/C", cmd])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?
+        .wait_with_output()?;
+
+    #[cfg(not(windows))]
     let output = std::process::Command::new("sh")
         .arg("-c")
         .arg(cmd)

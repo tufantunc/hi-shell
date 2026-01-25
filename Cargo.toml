@@ -1,6 +1,6 @@
 [package]
 name = "hi-shell"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "An intelligent terminal assistant that translates natural language descriptions into executable shell commands."
 license = "MIT"
