@@ -144,7 +144,7 @@ hi-shell --models
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to open issues or submit pull requests to improve `hi-shell`.
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting issues or pull requests.
 
 ## 📄 License
 
