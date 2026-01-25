@@ -15,23 +15,11 @@
 
 👋 **hi-shell**: An intelligent terminal assistant that translates your natural language descriptions into executable bash commands.
 
+<p align="center">
+  <img src="hi-shell-demo.gif" alt="hi-shell demo" width="600">
+</p>
+
 `hi-shell` helps you bridge the gap between "what I want to do" and "how do I write that command?". Whether you're a terminal veteran or a newcomer, `hi-shell` provides a fast, AI-powered way to generate and execute commands safely.
-
-## Should be test before 1.0.0 release:
-
-- [x] embedded models
-- [x] local models (tested lmstudio and ollama)
-- [ ] cloud models (tested openrouter, gemini, custom, need to test with antrophic)
-- [x] interactive mode
-- [x] one-shot mode
-- [x] safety features
-- [x] telemetry
-- [x] release workflow works
-- [ ] cargo publish works
-- [x] homebrew update works
-- [x] scoop update works
-- [ ] works on linux
-- [x] works on windows
 
 ## ✨ Features
 
