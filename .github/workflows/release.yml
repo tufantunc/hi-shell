@@ -93,7 +93,7 @@ jobs:
         with:
           formula-name: hi-shell
           homebrew-tap: tufantunc/homebrew-tap
-          download-url: https://github.com/tufantunc/hi-shell/releases/download/${{ github.ref_name }}/hi-shell-macos-arm64.tar.gz
+          download-url: https://github.com/tufantunc/hi-shell/releases/download/${{ github.ref_name }}/hi-shell-aarch64-apple-darwin.tar.gz
           commit-message: "Release ${{ github.ref_name }}"
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -110,6 +110,7 @@ jobs:
           repository: tufantunc/scoop-bucket
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: bucket
+          ref: main
 
       - name: Update manifest
         run: |
