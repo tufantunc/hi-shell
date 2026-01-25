@@ -28,10 +28,10 @@
 - [x] telemetry
 - [x] release workflow works
 - [ ] cargo publish works
-- [ ] homebrew update works
-- [ ] scoop update works
+- [x] homebrew update works
+- [x] scoop update works
 - [ ] works on linux
-- [ ] works on windows
+- [x] works on windows
 
 ## ✨ Features
 
