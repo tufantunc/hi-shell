@@ -91,6 +91,7 @@ brew update && brew upgrade hi-shell
 
 ### 🪟 Scoop (Windows)
 ```powershell
+scoop update
 scoop update hi-shell
 ```
 
