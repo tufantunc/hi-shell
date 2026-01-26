@@ -4,6 +4,9 @@
 	import InstallTabs from '$lib/components/InstallTabs.svelte';
 	import FeatureCard from '$lib/components/FeatureCard.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import StatsSection from '$lib/components/StatsSection.svelte';
+
+	let { data } = $props();
 
 	const oneShotDemo = [
 		{ type: 'input' as const, text: 'find all png files larger than 1mb', delay: 45 },
@@ -109,6 +112,11 @@
 			</div>
 		</div>
 	</section>
+
+	<!-- Stats Section -->
+	{#if data.stats.totalUsers > 0}
+		<StatsSection stats={data.stats} />
+	{/if}
 
 	<!-- Features Section -->
 	<section id="features" class="border-t border-border bg-muted/30 py-16 lg:py-24">

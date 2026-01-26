@@ -387,6 +387,11 @@ async fn process_request(
     history: &mut Vec<hi_shell::llm::Message>,
 ) -> Result<()> {
     let provider_name = format!("{:?}", config.llm_provider);
+    let model_name = match config.llm_provider {
+        LlmProvider::Embedded => config.embedded_model.clone(),
+        LlmProvider::Local => config.local_model.clone(),
+        LlmProvider::Cloud => config.cloud_model.clone(),
+    };
 
     // Add user request to history if it's not a repair turn
     history.push(hi_shell::llm::Message {
@@ -417,6 +422,7 @@ async fn process_request(
                     "command_generated",
                     serde_json::json!({
                         "provider": provider_name,
+                        "model": model_name,
                         "latency_ms": latency_ms,
                         "dangerous": response.dangerous,
                         "success": true,
