@@ -48,7 +48,11 @@
 		Zap,
 		Github,
 		ArrowRight,
-		Sparkles
+		Sparkles,
+		ShieldCheck,
+		Lock,
+		Users,
+		Code
 	} from '@lucide/svelte';
 </script>
 
@@ -238,6 +242,95 @@
 						</p>
 					</div>
 					<ExampleTerminal lines={safetyDemo} title="Safety Features" />
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Privacy & Security Section -->
+	<section id="privacy-security" class="border-t border-border bg-muted/30 py-16 lg:py-24">
+		<div class="container mx-auto px-4">
+			<div class="mb-12 text-center">
+				<Badge variant="secondary" class="mb-4">
+					<ShieldCheck class="mr-1 h-3 w-3" />
+					Open Source & Privacy First
+				</Badge>
+				<h2 class="mb-4 text-3xl font-bold lg:text-4xl">Built for Privacy & Openness</h2>
+				<p class="mx-auto max-w-2xl text-muted-foreground">
+					Your data and privacy are our top priority. Everything is open source, transparent, and fully under
+					your control.
+				</p>
+			</div>
+
+			<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+				<FeatureCard
+					title="Open Source MIT License"
+					description="All source code is fully available under MIT license. Inspect, modify, distribute, and improve it freely."
+					icon={Github}
+				/>
+				<FeatureCard
+					title="100% Local Operation"
+					description="Connect to your own Ollama or LM Studio instance. Run completely offline without any internet connection."
+					icon={Lock}
+				/>
+				<FeatureCard
+					title="Embedded Models"
+					description="Run Llama, Phi-3, and Qwen2 models locally on your own hardware with Metal/CUDA acceleration."
+					icon={Cpu}
+				/>
+				<FeatureCard
+					title="No User Data Tracking"
+					description="We never track your commands, prompts, or outputs. Only anonymous system information is collected (opt-in)."
+					icon={Shield}
+				/>
+				<FeatureCard
+					title="Optional Telemetry"
+					description="Completely opt-in anonymous usage statistics. No personal data is ever collected. Disable anytime."
+					icon={ShieldCheck}
+				/>
+				<FeatureCard
+					title="Transparent Codebase"
+					description="Fully inspectable code. Every commit, change, and discussion is visible on GitHub."
+					icon={Code}
+				/>
+			</div>
+
+			<div class="mt-12 grid gap-6 md:grid-cols-2">
+				<div class="rounded-lg border border-border bg-card p-6">
+					<h3 class="mb-2 flex items-center gap-2 text-lg font-semibold">
+						<Users class="h-5 w-5 text-primary" />
+						Community Audited
+					</h3>
+					<p class="text-sm text-muted-foreground">
+						Active community with issues and PRs ensures continuous oversight and improvement. Security
+						vulnerabilities are quickly identified and fixed.
+					</p>
+				</div>
+				<div class="rounded-lg border border-border bg-card p-6">
+					<h3 class="mb-2 flex items-center gap-2 text-lg font-semibold">
+						<ShieldCheck class="h-5 w-5 text-primary" />
+						Safety Built-In
+					</h3>
+					<p class="text-sm text-muted-foreground">
+						Dangerous commands are automatically detected and flagged. Confirmation is always required before
+						execution. Your system stays protected by default.
+					</p>
+				</div>
+			</div>
+
+			<div class="mt-12 rounded-lg bg-card p-6 text-center">
+				<h3 class="mb-2 text-xl font-semibold">Total Control in Your Hands</h3>
+				<p class="mb-4 text-muted-foreground">
+					Inspect the code, run it locally, contribute improvements. Everything is under your control.
+				</p>
+				<div class="flex flex-wrap justify-center gap-4">
+					<Button href="https://github.com/tufantunc/hi-shell">
+						<Github class="mr-2 h-4 w-4" />
+						Explore Source Code
+					</Button>
+					<Button variant="outline" href="#installation">
+						Try It Now
+					</Button>
 				</div>
 			</div>
 		</div>

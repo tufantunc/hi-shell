@@ -26,6 +26,7 @@
 			<a href="#features" class="text-sm text-muted-foreground hover:text-foreground">Features</a>
 			<a href="#installation" class="text-sm text-muted-foreground hover:text-foreground">Installation</a>
 			<a href="#usage" class="text-sm text-muted-foreground hover:text-foreground">Usage</a>
+			<a href="#privacy-security" class="text-sm text-muted-foreground hover:text-foreground">Privacy</a>
 			<ThemeToggle />
 			<Button variant="outline" size="sm" href="https://github.com/tufantunc/hi-shell">
 				<Github class="mr-2 h-4 w-4" />
@@ -70,6 +71,13 @@
 					onclick={closeMenu}
 				>
 					Usage
+				</a>
+				<a
+					href="#privacy-security"
+					class="text-sm text-muted-foreground hover:text-foreground"
+					onclick={closeMenu}
+				>
+					Privacy
 				</a>
 				<Button variant="outline" size="sm" href="https://github.com/tufantunc/hi-shell" class="w-fit">
 					<Github class="mr-2 h-4 w-4" />
