@@ -207,7 +207,7 @@ fn extract_field_value(json_str: &str, field: &str) -> Option<String> {
         if !after_colon.starts_with('"') {
             // Handle boolean/number values
             let end = after_colon
-                .find(|c: char| c == ',' || c == '}' || c == '\n')
+                .find([',', '}', '\n'])
                 .unwrap_or(after_colon.len());
             let value = after_colon[..end].trim();
             if !value.is_empty() {

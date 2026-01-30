@@ -6,6 +6,7 @@ use dialoguer::{Confirm, FuzzySelect, Input, Select};
 use hi_shell::config::{CloudProviderType, Config, LlmProvider, LocalProviderType};
 use hi_shell::llm::{LlmBackend, cloud::CloudClient, embedded::EmbeddedClient, local::LocalClient};
 use hi_shell::telemetry::Telemetry;
+use hi_shell::update::{UpdateChecker, should_check_update};
 use serde::Deserialize;
 use std::io::{self, Read, Write};
 
@@ -49,18 +50,18 @@ async fn fetch_gguf_files(repo: &str) -> Result<Vec<String>> {
     let url = format!("https://huggingface.co/api/models/{}/tree/main", repo);
     let client = reqwest::Client::new();
     let response = client.get(&url).send().await?;
-    
+
     if !response.status().is_success() {
         anyhow::bail!("Failed to fetch model files from HuggingFace");
     }
-    
+
     let entries: Vec<HfTreeEntry> = response.json().await?;
     let gguf_files: Vec<String> = entries
         .into_iter()
         .filter(|e| e.entry_type == "file" && e.path.ends_with(".gguf"))
         .map(|e| e.path)
         .collect();
-    
+
     Ok(gguf_files)
 }
 
@@ -99,6 +100,20 @@ async fn run() -> Result<()> {
     }
 
     let mut config = Config::load()?;
+
+    let last_check = config.get_last_update_check();
+    if should_check_update(last_check) {
+        let current_version = env!("CARGO_PKG_VERSION");
+        let checker = UpdateChecker::new(current_version)?;
+
+        if let Ok(update_info) = checker.check_for_updates().await {
+            if update_info.needs_update {
+                println!("{}", hi_shell::update::format_update_message(&update_info));
+            }
+
+            let _ = config.update_last_check();
+        }
+    }
 
     // Override model if provided via CLI
     if let Some(model_override) = args.model {
@@ -167,7 +182,7 @@ async fn run_init() -> Result<()> {
             config.embedded_model = Some(repo.clone());
 
             println!("{} Fetching available GGUF files...", "⏳".yellow());
-            
+
             let gguf_file = match fetch_gguf_files(&repo).await {
                 Ok(files) if !files.is_empty() => {
                     let idx = FuzzySelect::new()
@@ -178,13 +193,18 @@ async fn run_init() -> Result<()> {
                     files[idx].clone()
                 }
                 Ok(_) => {
-                    println!("{} No GGUF files found, please enter manually.", "⚠".yellow());
-                    Input::new()
-                        .with_prompt("GGUF Filename")
-                        .interact_text()?
+                    println!(
+                        "{} No GGUF files found, please enter manually.",
+                        "⚠".yellow()
+                    );
+                    Input::new().with_prompt("GGUF Filename").interact_text()?
                 }
                 Err(e) => {
-                    println!("{} Could not fetch files ({}), please enter manually.", "⚠".yellow(), e);
+                    println!(
+                        "{} Could not fetch files ({}), please enter manually.",
+                        "⚠".yellow(),
+                        e
+                    );
                     Input::new()
                         .with_prompt("GGUF Filename")
                         .default("Llama-3.2-1B-Instruct-Q4_K_M.gguf".to_string())

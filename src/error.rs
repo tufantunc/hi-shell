@@ -29,6 +29,9 @@ pub enum HiShellError {
     #[error("LLM loading error: {0}")]
     LlmLoad(String),
 
+    #[error("Update check error: {0}")]
+    UpdateCheck(String),
+
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
 }

@@ -1,4 +1,5 @@
 use crate::error::{HiShellError, Result};
+use chrono::{DateTime, Utc};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -41,6 +42,7 @@ pub struct Config {
     pub cloud_custom_url: Option<String>,
     pub api_key: Option<String>,
     pub telemetry_enabled: bool,
+    pub last_update_check: Option<String>,
 }
 
 impl Default for Config {
@@ -58,6 +60,7 @@ impl Default for Config {
             cloud_custom_url: None,
             api_key: None,
             telemetry_enabled: false,
+            last_update_check: None,
         }
     }
 }
@@ -86,6 +89,20 @@ impl Config {
         let path = Self::get_path()?;
         let content = toml::to_string_pretty(self)?;
         fs::write(path, content)?;
+        Ok(())
+    }
+
+    pub fn get_last_update_check(&self) -> Option<DateTime<Utc>> {
+        self.last_update_check.as_ref().and_then(|s| {
+            DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        })
+    }
+
+    pub fn update_last_check(&mut self) -> Result<()> {
+        self.last_update_check = Some(Utc::now().to_rfc3339());
+        self.save()?;
         Ok(())
     }
 }

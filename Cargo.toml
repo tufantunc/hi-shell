@@ -1,6 +1,6 @@
 [package]
 name = "hi-shell"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 description = "An intelligent terminal assistant that translates natural language descriptions into executable shell commands."
 license = "MIT"
@@ -43,3 +43,4 @@ candle-transformers = "0.8.2"
 tokenizers = "0.21.0"
 async-trait = "0.1.80"
 once_cell = "1.19"
+semver = "1.0"

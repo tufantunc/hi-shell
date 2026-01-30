@@ -30,6 +30,7 @@
 - **Interactive REPL**: A dedicated shell environment for continuous assistance.
 - **One-shot Mode**: Get quick answers directly from your command line.
 - **Safety First**: Dangerous commands are flagged, and confirmation is required before execution.
+- **Automatic Updates**: Checks for new versions every 24 hours and notifies you when updates are available.
 - **Telemetry**: Optional anonymous usage stats to help improve the tool.
 
 ## 🚀 Installation
@@ -71,6 +72,15 @@ You can download the pre-built binaries for your operating system from the [Rele
 3. Run `hi-shell --init` to set up your preferred LLM provider.
 
 ## 🔄 Updating
+
+### 🔔 Automatic Update Checking
+
+`hi-shell` automatically checks for updates every 24 hours on first run. If a new version is available, you'll see a notification with:
+- Current version
+- Latest version
+- Link to the release page
+
+This feature works across all installation methods and uses the GitHub Releases API to check for newer versions.
 
 ### 🍏 Homebrew (macOS & Linux)
 ```bash
