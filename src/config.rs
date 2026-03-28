@@ -75,8 +75,7 @@ impl Config {
         Ok(config_dir.join("config.toml"))
     }
 
-    pub fn load() -> Result<Self> {
-        let path = Self::get_path()?;
+    pub fn load_from(path: &std::path::Path) -> Result<Self> {
         if !path.exists() {
             return Ok(Self::default());
         }
@@ -85,11 +84,23 @@ impl Config {
         Ok(config)
     }
 
-    pub fn save(&self) -> Result<()> {
-        let path = Self::get_path()?;
+    pub fn save_to(&self, path: &std::path::Path) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         let content = toml::to_string_pretty(self)?;
         fs::write(path, content)?;
         Ok(())
+    }
+
+    pub fn load() -> Result<Self> {
+        let path = Self::get_path()?;
+        Self::load_from(&path)
+    }
+
+    pub fn save(&self) -> Result<()> {
+        let path = Self::get_path()?;
+        self.save_to(&path)
     }
 
     pub fn get_last_update_check(&self) -> Option<DateTime<Utc>> {

@@ -7,11 +7,22 @@ use tracing::{debug, info};
 
 pub struct CloudClient {
     config: Config,
+    base_url_override: Option<String>,
 }
 
 impl CloudClient {
     pub fn new(config: Config) -> Self {
-        Self { config }
+        Self {
+            config,
+            base_url_override: None,
+        }
+    }
+
+    pub fn with_base_url(config: Config, base_url: String) -> Self {
+        Self {
+            config,
+            base_url_override: Some(base_url),
+        }
     }
 
     pub async fn list_models(
@@ -161,7 +172,10 @@ impl LlmBackend for CloudClient {
 
         let (url, body) = match provider {
             CloudProviderType::OpenRouter => {
-                let url = "https://openrouter.ai/api/v1/chat/completions";
+                let url = self
+                    .base_url_override
+                    .as_deref()
+                    .unwrap_or("https://openrouter.ai/api/v1/chat/completions");
                 let model = self
                     .config
                     .cloud_model
@@ -190,10 +204,14 @@ impl LlmBackend for CloudClient {
                     .cloud_model
                     .as_deref()
                     .unwrap_or("gemini-1.5-flash");
-                let url = format!(
-                    "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-                    model, api_key
-                );
+                let url = if let Some(ref base) = self.base_url_override {
+                    base.clone()
+                } else {
+                    format!(
+                        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+                        model, api_key
+                    )
+                };
 
                 let mut combined_prompt = format!("{}\n\nConversation History:\n", system_prompt);
                 for msg in messages {
@@ -219,7 +237,10 @@ impl LlmBackend for CloudClient {
                 (url, body)
             }
             CloudProviderType::Anthropic => {
-                let url = "https://api.anthropic.com/v1/messages";
+                let url = self
+                    .base_url_override
+                    .as_deref()
+                    .unwrap_or("https://api.anthropic.com/v1/messages");
                 let model = self
                     .config
                     .cloud_model
@@ -244,7 +265,10 @@ impl LlmBackend for CloudClient {
                 (url.to_string(), body)
             }
             CloudProviderType::OpenAI => {
-                let url = "https://api.openai.com/v1/chat/completions";
+                let url = self
+                    .base_url_override
+                    .as_deref()
+                    .unwrap_or("https://api.openai.com/v1/chat/completions");
                 let model = self.config.cloud_model.as_deref().unwrap_or("gpt-4o");
 
                 let mut api_messages = vec![json!({"role": "system", "content": system_prompt})];

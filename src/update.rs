@@ -65,7 +65,7 @@ impl UpdateChecker {
         })
     }
 
-    fn compare_versions(&self, current: &str, latest: &str) -> bool {
+    pub fn compare_versions(&self, current: &str, latest: &str) -> bool {
         let current_ver = Version::parse(current).unwrap_or_else(|_| {
             Version::new(
                 current

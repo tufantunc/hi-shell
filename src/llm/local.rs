@@ -7,11 +7,22 @@ use tracing::{debug, info};
 
 pub struct LocalClient {
     config: Config,
+    base_url_override: Option<String>,
 }
 
 impl LocalClient {
     pub fn new(config: Config) -> Self {
-        Self { config }
+        Self {
+            config,
+            base_url_override: None,
+        }
+    }
+
+    pub fn with_base_url(config: Config, base_url: String) -> Self {
+        Self {
+            config,
+            base_url_override: Some(base_url),
+        }
     }
 
     fn normalize_base_url(base_url: &str) -> String {
@@ -95,11 +106,15 @@ impl LlmBackend for LocalClient {
             .as_ref()
             .ok_or_else(|| HiShellError::Config("Local provider not configured".to_string()))?;
 
-        let base_url = self
-            .config
-            .local_url
+        let effective_url = self
+            .base_url_override
             .as_deref()
-            .unwrap_or("http://localhost:11434");
+            .unwrap_or_else(|| {
+                self.config
+                    .local_url
+                    .as_deref()
+                    .unwrap_or("http://localhost:11434")
+            });
 
         let model = self.config.local_model.as_deref().unwrap_or("phi3");
 
@@ -116,7 +131,7 @@ impl LlmBackend for LocalClient {
 
         let res_text = match provider {
             LocalProviderType::Ollama => {
-                let url = Self::build_ollama_url(base_url, "generate");
+                let url = Self::build_ollama_url(effective_url, "generate");
                 let mut combined_prompt = format!("System: {}\n", system_prompt);
                 for msg in messages {
                     let role_str = match msg.role {
@@ -154,7 +169,7 @@ impl LlmBackend for LocalClient {
                     .to_string()
             }
             LocalProviderType::LmStudio => {
-                let url = Self::build_lmstudio_url(base_url, "chat/completions");
+                let url = Self::build_lmstudio_url(effective_url, "chat/completions");
                 let mut api_messages = vec![json!({"role": "system", "content": system_prompt})];
                 for msg in messages {
                     let role = match msg.role {

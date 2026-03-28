@@ -3,6 +3,7 @@ use atty::Stream;
 use clap::Parser;
 use colored::*;
 use dialoguer::{Confirm, FuzzySelect, Input, Select};
+use hi_shell::command::{execute_command, truncate_output};
 use hi_shell::config::{CloudProviderType, Config, LlmProvider, LocalProviderType};
 use hi_shell::llm::{LlmBackend, cloud::CloudClient, embedded::EmbeddedClient, local::LocalClient};
 use hi_shell::telemetry::Telemetry;
@@ -499,14 +500,9 @@ async fn process_request(
                     println!("\n{} Executing...", "➜".blue());
                 }
 
-                let (output, success) = execute_command(&response.command)?;
+                let (output, success) = execute_command_with_output(&response.command)?;
 
-                // Add command output to history
-                let truncated_output = if output.len() > 1000 {
-                    format!("{}... (truncated)", &output[..1000])
-                } else {
-                    output.clone()
-                };
+                let truncated_output = truncate_output(&output, 1000);
 
                 history.push(hi_shell::llm::Message {
                     role: hi_shell::llm::Role::System,
@@ -563,43 +559,27 @@ async fn process_request(
     }
 }
 
-fn execute_command(cmd: &str) -> Result<(String, bool)> {
-    #[cfg(windows)]
-    let output = std::process::Command::new("cmd")
-        .args(["/C", cmd])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?
-        .wait_with_output()?;
+fn execute_command_with_output(cmd: &str) -> Result<(String, bool)> {
+    let (combined, success) = execute_command(cmd)?;
 
-    #[cfg(not(windows))]
-    let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?
-        .wait_with_output()?;
+    let stdout_end = combined.find("\nError:\n").unwrap_or(combined.len());
+    let stdout_part = &combined[..stdout_end];
+    let stderr_part = if stdout_end < combined.len() {
+        &combined[stdout_end + "\nError:\n".len()..]
+    } else {
+        ""
+    };
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if !stdout.is_empty() {
-        print!("{}", stdout);
+    if !stdout_part.is_empty() {
+        print!("{}", stdout_part);
         io::stdout().flush()?;
     }
-    if !stderr.is_empty() {
-        eprint!("{}", stderr);
+    if !stderr_part.is_empty() {
+        eprint!("{}", stderr_part);
         io::stderr().flush()?;
     }
 
-    let mut combined = stdout;
-    if !stderr.is_empty() {
-        combined.push_str("\nError:\n");
-        combined.push_str(&stderr);
-    }
-
-    Ok((combined, output.status.success()))
+    Ok((combined, success))
 }
 
 async fn run_repl(config: &Config, telemetry: &Telemetry) -> Result<()> {
