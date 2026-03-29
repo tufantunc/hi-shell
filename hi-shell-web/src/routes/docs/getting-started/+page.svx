@@ -1,0 +1,153 @@
+<svelte:head>
+	<title>Getting Started</title>
+	<meta name="description" content="Get started with hi-shell - install, configure your first LLM provider, and run your first AI-generated command." />
+	<meta property="og:title" content="Getting Started - hi-shell" />
+	<meta property="og:description" content="Install and configure hi-shell in minutes. Choose from embedded, local, or cloud LLM providers." />
+	<link rel="canonical" href="https://hi-shell.dev/docs/getting-started" />
+</svelte:head>
+
+# Getting Started
+
+Get hi-shell up and running in under 5 minutes.
+
+## Prerequisites
+
+- **OS**: macOS, Linux, or Windows
+- **Terminal**: Any modern terminal emulator
+- **Internet**: Required for initial download and cloud providers (optional for fully local use)
+
+## Installation
+
+### macOS / Linux (Quick Install)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tufantunc/hi-shell/main/install.sh | bash
+```
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap tufantunc/hi-shell
+brew install hi-shell
+```
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add hi-shell https://github.com/tufantunc/hi-shell
+scoop install hi-shell
+```
+
+### Cargo (All Platforms)
+
+```bash
+cargo install hi-shell
+```
+
+### From Source
+
+```bash
+git clone https://github.com/tufantunc/hi-shell.git
+cd hi-shell
+cargo build --release
+```
+
+For hardware acceleration on macOS:
+
+```bash
+cargo build --release --features metal
+```
+
+For CUDA support on Linux:
+
+```bash
+cargo build --release --features cuda
+```
+
+## Initial Setup
+
+After installing, run the interactive setup wizard:
+
+```bash
+hi-shell --init
+```
+
+This will guide you through:
+
+1. **Choosing a provider** — Embedded, Local (Ollama/LM Studio), or Cloud
+2. **Configuring your provider** — Model selection, API keys (for cloud), URLs (for local)
+3. **Testing the connection** — Verifying everything works
+
+## Your First Command
+
+### One-shot Mode
+
+Simply prefix your natural language request with `hi-shell`:
+
+```bash
+hi-shell find all png files larger than 1MB
+```
+
+Output:
+```
+find . -name "*.png" -size +1M
+```
+
+### Interactive REPL Mode
+
+Start a conversation with your shell:
+
+```bash
+hi-shell
+```
+
+```
+> list all docker containers
+docker ps -a
+
+> now show only running ones
+docker ps
+
+> stop all of them
+⚠ Warning: This command is potentially dangerous
+docker stop $(docker ps -q)
+Execute? [y/N]
+```
+
+## Choosing a Provider
+
+### Embedded Models (Easiest)
+
+No external dependencies. hi-shell downloads and runs a small LLM model directly.
+
+```bash
+hi-shell --init
+# Select "Embedded" → Choose a model → Done
+```
+
+Best for: Quick start, offline use, privacy-first users.
+
+### Local LLMs (Recommended)
+
+Use Ollama or LM Studio for better quality with larger models:
+
+- [Ollama Setup](/docs/providers/ollama)
+- [LM Studio Setup](/docs/providers/lm-studio)
+
+Best for: Users who want quality responses and already run local LLMs.
+
+### Cloud Providers (Most Powerful)
+
+Use commercial LLM APIs for the best results:
+
+- [OpenRouter](/docs/providers/openrouter) — Access to many models
+- [Anthropic Claude](/docs/providers/anthropic)
+- [OpenAI](/docs/providers/openai)
+
+Best for: Users comfortable with API keys who want the highest quality.
+
+## Next Steps
+
+- [Configure advanced options](/docs/configuration)
+- [Troubleshoot common issues](/docs/troubleshooting)
+- [Read the FAQ](/docs/faq)

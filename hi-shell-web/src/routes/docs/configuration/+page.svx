@@ -1,0 +1,153 @@
+<svelte:head>
+	<title>Configuration</title>
+	<meta name="description" content="Complete configuration reference for hi-shell. Learn about all config options, TOML format, and environment variables." />
+	<meta property="og:title" content="Configuration - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/configuration" />
+</svelte:head>
+
+# Configuration
+
+hi-shell uses a TOML configuration file for all settings. The config file is automatically created during `hi-shell --init`.
+
+## Config File Location
+
+| Platform | Path |
+|----------|------|
+| **macOS** | `~/Library/Application Support/com.hi-shell.hi-shell/config.toml` |
+| **Linux** | `~/.config/hi-shell/config.toml` |
+| **Windows** | `%APPDATA%\hi-shell\config\config.toml` |
+
+## Full Config Reference
+
+```toml
+# Unique installation identifier (auto-generated)
+installation_id = "550e8400-e29b-41d4-a716-446655440000"
+
+# LLM Provider: "Embedded", "Local", or "Cloud"
+llm_provider = "Embedded"
+
+# --- Embedded Model Settings ---
+# Hugging Face model repository
+embedded_model = "lmstudio-community/Llama-3.2-1B-Instruct-GGUF"
+# Specific GGUF file to use
+embedded_model_file = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+
+# --- Local Provider Settings ---
+# Local provider type: "Ollama" or "LmStudio"
+local_provider = "Ollama"
+# API endpoint URL
+local_url = "http://localhost:11434"
+# Model name
+local_model = "llama3.2"
+
+# --- Cloud Provider Settings ---
+# Cloud provider: "OpenRouter", "Anthropic", "OpenAI", "Gemini", or "Custom"
+cloud_provider = "OpenRouter"
+# Model identifier
+cloud_model = "microsoft/phi-3-mini-4k-instruct"
+# Custom API URL (for Custom provider only)
+cloud_custom_url = ""
+# API key
+api_key = ""
+
+# --- Telemetry ---
+# Anonymous usage statistics (opt-in)
+telemetry_enabled = false
+
+# --- Updates ---
+# Last update check timestamp (ISO 8601)
+last_update_check = "2024-01-15T10:30:00Z"
+```
+
+## Provider Configuration
+
+### Embedded
+
+```toml
+llm_provider = "Embedded"
+embedded_model = "lmstudio-community/Llama-3.2-1B-Instruct-GGUF"
+embedded_model_file = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+```
+
+### Local (Ollama)
+
+```toml
+llm_provider = "Local"
+local_provider = "Ollama"
+local_url = "http://localhost:11434"
+local_model = "llama3.2"
+```
+
+### Local (LM Studio)
+
+```toml
+llm_provider = "Local"
+local_provider = "LmStudio"
+local_url = "http://localhost:1234"
+local_model = "TheBloke/Llama-2-7B-Chat-GGUF"
+```
+
+### Cloud (OpenRouter)
+
+```toml
+llm_provider = "Cloud"
+cloud_provider = "OpenRouter"
+cloud_model = "microsoft/phi-3-mini-4k-instruct"
+api_key = "sk-or-..."
+```
+
+### Cloud (Anthropic)
+
+```toml
+llm_provider = "Cloud"
+cloud_provider = "Anthropic"
+cloud_model = "claude-sonnet-4-20250514"
+api_key = "sk-ant-..."
+```
+
+### Cloud (OpenAI)
+
+```toml
+llm_provider = "Cloud"
+cloud_provider = "OpenAI"
+cloud_model = "gpt-4o-mini"
+api_key = "sk-..."
+```
+
+### Cloud (Custom)
+
+```toml
+llm_provider = "Cloud"
+cloud_provider = "Custom"
+cloud_custom_url = "https://your-llm-api.example.com/v1/chat/completions"
+cloud_model = "your-model-name"
+api_key = "your-api-key"
+```
+
+## CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `hi-shell --init` | Interactive setup wizard |
+| `hi-shell --version` | Show version |
+| `hi-shell --help` | Show help |
+| `hi-shell -v` | Verbose output (debug logs) |
+| `hi-shell "your query"` | One-shot mode |
+| `hi-shell` | Interactive REPL mode |
+
+## Environment Variables
+
+hi-shell does not use environment variables for configuration. All settings are managed through the TOML config file.
+
+## Security Best Practices
+
+1. **Protect your config file** — It contains API keys
+   ```bash
+   chmod 600 ~/.config/hi-shell/config.toml
+   ```
+
+2. **Don't commit your config** — Add to `.gitignore` if sharing dotfiles
+
+3. **Rotate compromised keys** — If your config is exposed, rotate API keys immediately
+
+4. **Use local providers** — For maximum privacy, use Embedded or Ollama providers

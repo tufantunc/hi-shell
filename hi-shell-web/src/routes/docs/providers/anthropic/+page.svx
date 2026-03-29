@@ -1,0 +1,91 @@
+<svelte:head>
+	<title>Anthropic Claude</title>
+	<meta name="description" content="Connect hi-shell to Anthropic Claude for high-quality AI-powered shell command generation." />
+	<meta property="og:title" content="Anthropic Provider - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/providers/anthropic" />
+</svelte:head>
+
+# Anthropic Claude
+
+Connect hi-shell to [Anthropic](https://anthropic.com) to use Claude models for shell command generation. Claude excels at understanding nuanced natural language and generating accurate commands.
+
+## Prerequisites
+
+- An [Anthropic account](https://console.anthropic.com)
+- An API key from the [Anthropic Console](https://console.anthropic.com/settings/keys)
+
+## Setup
+
+### 1. Get an API Key
+
+1. Sign up at [console.anthropic.com](https://console.anthropic.com)
+2. Go to **Settings → API Keys**
+3. Create a new API key
+4. Copy the key
+
+### 2. Configure hi-shell
+
+```bash
+hi-shell --init
+# Select "Cloud" → "Anthropic"
+# Paste your API key
+# Choose a model (e.g., "claude-sonnet-4-20250514")
+```
+
+### Manual Configuration
+
+Edit `~/.config/hi-shell/config.toml`:
+
+```toml
+llm_provider = "Cloud"
+cloud_provider = "Anthropic"
+cloud_model = "claude-sonnet-4-20250514"
+api_key = "sk-ant-your-api-key-here"
+```
+
+## Available Models
+
+| Model | Context Window | Best For |
+|-------|---------------|----------|
+| `claude-sonnet-4-20250514` | 200K | Best balance of speed and quality |
+| `claude-haiku-3-5-20241022` | 200K | Fast responses, lower cost |
+| `claude-3-5-sonnet-20241022` | 200K | Previous generation, still excellent |
+
+> We recommend **Claude Sonnet 4** as the default for the best balance of quality and speed.
+
+## Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| `cloud_model` | Model identifier |
+| `api_key` | Your Anthropic API key |
+
+## Pricing
+
+Anthropic charges per token. For hi-shell usage:
+
+- Each command typically uses ~200-500 tokens
+- **Haiku**: ~$0.001 per command (very affordable)
+- **Sonnet**: ~$0.003 per command
+
+Check [anthropic.com/pricing](https://www.anthropic.com/pricing) for current rates.
+
+## Troubleshooting
+
+### "Invalid API key" Error
+
+- Verify your key in the [Anthropic Console](https://console.anthropic.com/settings/keys)
+- Ensure the key hasn't been revoked
+- Check for extra whitespace
+
+### "Credit balance is too low"
+
+- Add credits in the Anthropic Console
+- Check your usage and billing settings
+
+### Rate Limits
+
+Anthropic has rate limits based on your tier. If you hit them:
+- Wait a moment and retry
+- Upgrade your Anthropic plan
+- Use a smaller model (Haiku)

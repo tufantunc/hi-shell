@@ -1,0 +1,139 @@
+<svelte:head>
+	<title>FAQ</title>
+	<meta name="description" content="Frequently asked questions about hi-shell - the AI-powered terminal assistant." />
+	<meta property="og:title" content="FAQ - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/faq" />
+</svelte:head>
+
+# Frequently Asked Questions
+
+## General
+
+### What is hi-shell?
+
+hi-shell is a CLI tool that translates natural language descriptions into executable shell commands. Instead of searching the web for commands, you describe what you want to do in plain English, and hi-shell generates the appropriate command.
+
+### Is hi-shell free?
+
+Yes! hi-shell is open source under the MIT license. It's completely free to use.
+
+However, cloud LLM providers (OpenRouter, Anthropic, OpenAI) may charge for API usage. You can use embedded models or local providers (Ollama, LM Studio) completely free.
+
+### Is hi-shell safe?
+
+hi-shell includes multiple safety features:
+
+- **Dangerous command detection** — Commands that could harm your system are flagged
+- **Confirmation required** — Every command requires your approval before execution
+- **No auto-execution** — Commands are never run automatically
+- **Transparent** — You always see the exact command before it runs
+
+### Which platforms are supported?
+
+hi-shell runs on **macOS**, **Linux**, and **Windows**.
+
+## Providers & Models
+
+### Which provider should I use?
+
+| Use Case | Recommended Provider |
+|----------|---------------------|
+| Just getting started | Embedded (no setup needed) |
+| Best offline experience | Ollama or LM Studio |
+| Best quality responses | Anthropic Claude or OpenAI GPT-4o |
+| Free cloud option | OpenRouter (many free models) |
+| Maximum privacy | Embedded or Ollama |
+
+### Can I use hi-shell offline?
+
+Yes! With **embedded models** or **local providers** (Ollama/LM Studio), hi-shell works entirely offline after the initial model download.
+
+Cloud providers (OpenRouter, Anthropic, OpenAI) require an internet connection.
+
+### Can I switch providers?
+
+Yes. Run `hi-shell --init` again, or manually edit the config file. See [Configuration](/docs/configuration) for details.
+
+### What's the difference between embedded and local providers?
+
+- **Embedded**: The model runs inside hi-shell itself. No external software needed, but models are typically smaller.
+- **Local** (Ollama/LM Studio): The model runs in a separate application. You can use larger, more capable models.
+
+## Privacy & Data
+
+### Does hi-shell send my data anywhere?
+
+It depends on your provider:
+
+- **Embedded / Local**: Nothing leaves your machine
+- **Cloud providers**: Your natural language prompt is sent to the cloud API. No other data is sent.
+
+### What telemetry does hi-shell collect?
+
+Telemetry is **opt-in** and completely anonymous:
+
+- No prompts, commands, or outputs are collected
+- Only anonymous system info (OS, provider type, model name)
+- Can be disabled at any time
+
+### Where is my API key stored?
+
+API keys are stored locally in your config file (`~/.config/hi-shell/config.toml` on Linux/macOS). They are never sent anywhere except to the respective API provider.
+
+## Performance
+
+### Why is hi-shell slow?
+
+Response time depends on your provider:
+
+- **Cloud providers**: Usually 1-3 seconds (depends on model and network)
+- **Local providers**: Depends on your hardware and model size
+- **Embedded**: Depends on your CPU/GPU and model size
+
+To speed things up:
+- Use a smaller/faster model
+- Enable hardware acceleration (Metal/CUDA)
+- Use a cloud provider with a fast model (e.g., gpt-4o-mini)
+
+### How much RAM does hi-shell need?
+
+- **Embedded models**: 1-4 GB depending on model
+- **Local providers**: Depends on the Ollama/LM Studio model (1-16 GB)
+- **Cloud providers**: Minimal — only the hi-shell binary itself
+
+## Troubleshooting
+
+See the [Troubleshooting guide](/docs/troubleshooting) for common issues and solutions.
+
+### How do I reset hi-shell?
+
+Delete the config file and run init again:
+
+```bash
+# Linux/macOS
+rm ~/.config/hi-shell/config.toml
+hi-shell --init
+
+# macOS (alternative location)
+rm ~/Library/Application\ Support/com.hi-shell.hi-shell/config.toml
+hi-shell --init
+```
+
+### How do I uninstall hi-shell?
+
+```bash
+# If installed via quick install
+rm ~/.local/bin/hi-shell
+
+# If installed via cargo
+cargo uninstall hi-shell
+
+# If installed via Homebrew
+brew uninstall hi-shell
+
+# Remove config
+rm -rf ~/.config/hi-shell/
+
+# Remove cached models
+rm -rf ~/.cache/huggingface/hub/models--*
+```

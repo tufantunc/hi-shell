@@ -5,8 +5,11 @@
 	import FeatureCard from '$lib/components/FeatureCard.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import StatsSection from '$lib/components/StatsSection.svelte';
+	import { buildJsonLd } from '$lib/seo';
 
 	let { data } = $props();
+
+	const jsonLd = buildJsonLd();
 
 	const oneShotDemo = [
 		{ type: 'input' as const, text: 'find all png files larger than 1mb', delay: 45 },
@@ -62,6 +65,17 @@
 		name="description"
 		content="An intelligent terminal assistant that translates your natural language descriptions into executable bash commands."
 	/>
+	<meta name="keywords" content="terminal, shell, AI, CLI, LLM, command generator, bash, natural language, developer tools" />
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content="hi-shell - AI-Powered Terminal Assistant" />
+	<meta property="og:description" content="Translate natural language into executable shell commands with an intelligent terminal assistant." />
+	<meta property="og:image" content="https://hi-shell.dev/small-hermit-crab-mascot.png" />
+	<meta property="og:url" content="https://hi-shell.dev" />
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="hi-shell - AI-Powered Terminal Assistant" />
+	<meta name="twitter:description" content="Translate natural language into executable shell commands." />
+	<link rel="canonical" href="https://hi-shell.dev" />
+	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
 <div class="min-h-screen bg-background">
@@ -371,12 +385,18 @@
 					<span class="text-xl">🐚</span>
 					<span class="font-semibold">hi-shell</span>
 				</div>
-				<p class="text-sm text-muted-foreground">
-					Released under the <a
+				<div class="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
+					<a href="/docs" class="hover:text-foreground">Docs</a>
+					<a href="/changelog" class="hover:text-foreground">Changelog</a>
+					<a href="/playground" class="hover:text-foreground">Playground</a>
+					<span class="text-border">|</span>
+					<a
 						href="https://github.com/tufantunc/hi-shell/blob/main/LICENSE"
-						class="underline hover:text-foreground">MIT License</a
+						class="hover:text-foreground"
 					>
-				</p>
+						MIT License
+					</a>
+				</div>
 				<div class="flex items-center gap-4">
 					<a
 						href="https://github.com/tufantunc/hi-shell"

@@ -1,0 +1,120 @@
+<svelte:head>
+	<title>Embedded Models</title>
+	<meta name="description" content="Run LLM models locally inside hi-shell with candle and hardware acceleration (Metal/CUDA). No external dependencies required." />
+	<meta property="og:title" content="Embedded Models - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/providers/embedded" />
+</svelte:head>
+
+# Embedded Models
+
+Run LLM models directly inside hi-shell — no external server or API key required. Embedded models use the [candle](https://github.com/huggingface/candle) framework for inference with hardware acceleration support.
+
+## How It Works
+
+hi-shell bundles the ability to download and run quantized GGUF models locally using candle:
+
+1. On first use, the model is automatically downloaded from Hugging Face
+2. The model is cached locally for future use
+3. Inference runs on CPU by default, with Metal (macOS) or CUDA (Linux) acceleration when available
+
+## Supported Architectures
+
+| Architecture | Example Models | Notes |
+|-------------|----------------|-------|
+| **Llama** | Llama-3.2-1B-Instruct | Default, good balance of speed and quality |
+| **Phi-3** | Phi-3-mini-4k-instruct | Microsoft's compact model |
+| **Qwen2** | Qwen2-1.5B-Instruct | Alibaba's multilingual model |
+
+## Default Model
+
+The default model is `Llama-3.2-1B-Instruct` quantized to Q4_K_M format (~700MB). It provides a good balance between response quality and resource usage.
+
+## Setup
+
+### Standard Setup
+
+```bash
+hi-shell --init
+# Select "Embedded"
+# Choose a model from the list
+# The model will be downloaded automatically on first use
+```
+
+### Manual Configuration
+
+Edit your config file (typically `~/.config/hi-shell/config.toml`):
+
+```toml
+llm_provider = "Embedded"
+embedded_model = "lmstudio-community/Llama-3.2-1B-Instruct-GGUF"
+embedded_model_file = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+```
+
+## Hardware Acceleration
+
+### macOS — Metal
+
+Build with Metal support for GPU acceleration:
+
+```bash
+cargo build --release --features metal
+```
+
+This significantly speeds up inference on Apple Silicon Macs.
+
+### Linux — CUDA
+
+Build with CUDA support for NVIDIA GPUs:
+
+```bash
+cargo build --release --features cuda
+```
+
+Requires CUDA toolkit to be installed.
+
+### CPU Fallback
+
+Without feature flags, hi-shell uses CPU inference. This works everywhere but is slower.
+
+## Model Storage
+
+Models are cached in the Hugging Face cache directory:
+
+- **macOS/Linux**: `~/.cache/huggingface/hub/`
+- **Windows**: `%LOCALAPPDATA%\huggingface\hub\`
+
+## Available Models
+
+You can use any GGUF quantized model from Hugging Face. Some recommended options:
+
+**Small &amp; Fast (&lt; 1GB)**
+- `lmstudio-community/Llama-3.2-1B-Instruct-GGUF` — Default, good quality
+- `Qwen/Qwen2-1.5B-Instruct-GGUF` — Good multilingual support
+
+**Medium (1-3GB)**
+- `lmstudio-community/Phi-3-mini-4k-instruct-GGUF` — Better reasoning
+- `lmstudio-community/Llama-3.2-3B-Instruct-GGUF` — Improved quality
+
+To use a different model, update your config:
+
+```toml
+embedded_model = "Qwen/Qwen2-1.5B-Instruct-GGUF"
+embedded_model_file = "qwen2-1_5b-instruct-q4_k_m.gguf"
+```
+
+## Limitations
+
+- Embedded models are smaller and less capable than cloud/local alternatives
+- First run requires downloading the model (~700MB-3GB depending on model)
+- Response quality depends heavily on the model size
+- Not suitable for complex multi-step reasoning tasks
+
+## When to Use Embedded vs. Other Providers
+
+| Scenario | Recommended Provider |
+|----------|---------------------|
+| Quick start, no setup | Embedded |
+| Offline / air-gapped environments | Embedded or Ollama |
+| Best quality responses | Cloud (OpenRouter/Anthropic) |
+| Privacy-first with good quality | Ollama or LM Studio |
+| Low resource machine | Embedded (small models) |

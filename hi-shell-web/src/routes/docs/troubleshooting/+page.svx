@@ -1,0 +1,183 @@
+<svelte:head>
+	<title>Troubleshooting</title>
+	<meta name="description" content="Solutions to common hi-shell issues. Fix connection errors, model problems, and configuration issues." />
+	<meta property="og:title" content="Troubleshooting - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/troubleshooting" />
+</svelte:head>
+
+# Troubleshooting
+
+Common issues and their solutions.
+
+## Installation Issues
+
+### "command not found: hi-shell"
+
+**Problem:** hi-shell is not in your PATH.
+
+**Solution:**
+- If installed via the quick install script, restart your terminal
+- If installed via cargo, ensure `~/.cargo/bin` is in your PATH:
+  ```bash
+  export PATH="$HOME/.cargo/bin:$PATH"
+  ```
+- If built from source, copy the binary to a PATH directory:
+  ```bash
+  cp target/release/hi-shell /usr/local/bin/
+  ```
+
+### Build Fails from Source
+
+**Problem:** Compilation errors when building with `cargo build`.
+
+**Solutions:**
+- Ensure you have Rust 1.70+: `rustc --version`
+- Update Rust: `rustup update`
+- For Metal acceleration on macOS, ensure Xcode Command Line Tools are installed:
+  ```bash
+  xcode-select --install
+  ```
+- For CUDA on Linux, ensure the CUDA toolkit is installed
+
+## Connection Issues
+
+### "Connection refused" (Local Providers)
+
+**Problem:** Cannot connect to Ollama or LM Studio.
+
+**Solutions:**
+
+**Ollama:**
+```bash
+# Check if Ollama is running
+ollama list
+
+# Start Ollama if not running
+ollama serve
+
+# Test the API directly
+curl http://localhost:11434/api/tags
+```
+
+**LM Studio:**
+1. Open LM Studio
+2. Go to the Local Server tab
+3. Ensure a model is loaded and server is started
+4. Verify the port matches your config (default: 1234)
+
+### "Invalid API key" (Cloud Providers)
+
+**Problem:** API key is rejected.
+
+**Solutions:**
+- Verify the key in the provider's dashboard
+- Check for extra whitespace or newlines
+- Ensure the key hasn't been revoked
+- Try regenerating the key
+
+**For OpenRouter:** Key starts with `sk-or-`
+**For Anthropic:** Key starts with `sk-ant-`
+**For OpenAI:** Key starts with `sk-`
+
+### Network Timeout
+
+**Problem:** Request times out.
+
+**Solutions:**
+- Check your internet connection
+- Try a different model (smaller models respond faster)
+- For local providers, ensure the model is fully loaded before sending requests
+- Increase timeout if on a slow connection
+
+## Model Issues
+
+### Embedded Model Download Fails
+
+**Problem:** Cannot download the embedded model.
+
+**Solutions:**
+- Check your internet connection
+- Ensure enough disk space (models are 700MB-3GB)
+- Try a different model
+- Manually download from Hugging Face and place in cache directory
+
+### Model Returns Nonsensical Commands
+
+**Problem:** Generated commands don't make sense.
+
+**Solutions:**
+- Use a larger/better model (e.g., switch from embedded to Ollama with a 7B model)
+- Be more specific in your natural language description
+- Try a cloud provider for the best quality
+
+### Embedded Model Is Slow
+
+**Problem:** Long response times with embedded models.
+
+**Solutions:**
+- Build with hardware acceleration:
+  ```bash
+  # macOS
+  cargo build --release --features metal
+  # Linux with NVIDIA GPU
+  cargo build --release --features cuda
+  ```
+- Use a smaller model (e.g., 1B parameter instead of 3B)
+- Close other resource-intensive applications
+
+## REPL Issues
+
+### REPL Crashes or Freezes
+
+**Problem:** The interactive REPL stops responding.
+
+**Solutions:**
+- Press `Ctrl+C` to cancel the current operation
+- Press `Ctrl+D` to exit the REPL
+- Restart hi-shell
+- Run with verbose logging: `hi-shell -v`
+
+### History Not Working
+
+**Problem:** Command history isn't persisted between sessions.
+
+**Solution:** This is expected — REPL history is session-based. Each new session starts fresh.
+
+## Configuration Issues
+
+### Config File Not Found
+
+**Problem:** hi-shell can't find or create the config file.
+
+**Solutions:**
+- Ensure the config directory exists:
+  ```bash
+  # Linux/macOS
+  mkdir -p ~/.config/hi-shell
+  ```
+- Check directory permissions
+- Run `hi-shell --init` to create a fresh config
+
+### Config Changes Not Taking Effect
+
+**Problem:** Modified config doesn't seem to work.
+
+**Solutions:**
+- Restart hi-shell (config is read at startup)
+- Check for TOML syntax errors in the config file
+- Validate the config:
+  ```bash
+  cat ~/.config/hi-shell/config.toml
+  ```
+
+## Getting More Help
+
+If your issue isn't listed here:
+
+1. Check the [FAQ](/docs/faq)
+2. Search existing [GitHub Issues](https://github.com/tufantunc/hi-shell/issues)
+3. Open a new issue with:
+   - Your OS and hi-shell version
+   - Your provider and model
+   - The error message
+   - Steps to reproduce

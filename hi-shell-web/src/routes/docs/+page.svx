@@ -1,0 +1,61 @@
+<script lang="ts">
+	import { Button } from '$lib/components/ui/button';
+	import { ArrowRight, Terminal, Zap, Shield } from '@lucide/svelte';
+</script>
+
+<svelte:head>
+	<title>Documentation</title>
+	<meta name="description" content="Complete documentation for hi-shell - learn how to install, configure, and use the AI-powered terminal assistant." />
+	<meta property="og:title" content="hi-shell Documentation" />
+	<meta property="og:description" content="Complete documentation for hi-shell - learn how to install, configure, and use the AI-powered terminal assistant." />
+	<link rel="canonical" href="https://hi-shell.dev/docs" />
+</svelte:head>
+
+# Documentation
+
+Welcome to the **hi-shell** documentation. hi-shell is an intelligent terminal assistant that translates natural language descriptions into executable shell commands.
+
+## Quick Links
+
+<div class="not-prose my-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+	<a href="/docs/getting-started" class="group rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/50 hover:shadow-lg">
+		<Terminal class="mb-3 h-8 w-8 text-primary" />
+		<h3 class="mb-1 font-semibold">Getting Started</h3>
+		<p class="text-sm text-muted-foreground">Install hi-shell and run your first AI-generated command.</p>
+	</a>
+	<a href="/docs/providers/embedded" class="group rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/50 hover:shadow-lg">
+		<Zap class="mb-3 h-8 w-8 text-primary" />
+		<h3 class="mb-1 font-semibold">Embedded Models</h3>
+		<p class="text-sm text-muted-foreground">Run LLM models locally with hardware acceleration.</p>
+	</a>
+	<a href="/docs/configuration" class="group rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/50 hover:shadow-lg">
+		<Shield class="mb-3 h-8 w-8 text-primary" />
+		<h3 class="mb-1 font-semibold">Configuration</h3>
+		<p class="text-sm text-muted-foreground">Customize hi-shell behavior with config files.</p>
+	</a>
+</div>
+
+## How It Works
+
+1. **You describe** what you want to do in natural language
+2. **hi-shell sends** your description to an LLM (local or cloud)
+3. **The LLM generates** the appropriate shell command
+4. **hi-shell shows** the command and asks for confirmation
+5. **You review** and approve before execution
+
+## Provider Options
+
+| Provider | Type | Requires Internet | Setup Difficulty |
+|----------|------|-------------------|-----------------|
+| Embedded Models | Local | No (download only) | Easy |
+| Ollama | Local | No | Easy |
+| LM Studio | Local | No | Easy |
+| OpenRouter | Cloud | Yes | Easy |
+| Anthropic | Cloud | Yes | Easy |
+| OpenAI | Cloud | Yes | Easy |
+
+## Need Help?
+
+- Check the [Troubleshooting](/docs/troubleshooting) guide for common issues
+- Browse the [FAQ](/docs/faq) for frequently asked questions
+- Open an issue on [GitHub](https://github.com/tufantunc/hi-shell/issues)

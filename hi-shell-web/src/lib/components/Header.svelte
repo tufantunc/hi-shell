@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import { Github, Menu, X } from '@lucide/svelte';
+	import { Github, Menu, X, Book, FileText, Terminal } from '@lucide/svelte';
+	import { page } from '$app/stores';
 
 	let mobileMenuOpen = $state(false);
 
@@ -12,6 +13,12 @@
 	function closeMenu() {
 		mobileMenuOpen = false;
 	}
+
+	const navLinks = [
+		{ href: '/docs', label: 'Docs', icon: Book },
+		{ href: '/changelog', label: 'Changelog', icon: FileText },
+		{ href: '/playground', label: 'Playground', icon: Terminal }
+	];
 </script>
 
 <header class="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -23,10 +30,18 @@
 
 		<!-- Desktop Navigation -->
 		<nav class="hidden items-center gap-4 md:flex">
-			<a href="#features" class="text-sm text-muted-foreground hover:text-foreground">Features</a>
-			<a href="#installation" class="text-sm text-muted-foreground hover:text-foreground">Installation</a>
-			<a href="#usage" class="text-sm text-muted-foreground hover:text-foreground">Usage</a>
-			<a href="#privacy-security" class="text-sm text-muted-foreground hover:text-foreground">Privacy</a>
+			{#each navLinks as link}
+				<a
+					href={link.href}
+					class="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground {$page.url.pathname === link.href || $page.url.pathname.startsWith(link.href + '/') ? 'font-medium text-foreground' : ''}"
+				>
+					<link.icon class="h-3.5 w-3.5" />
+					{link.label}
+				</a>
+			{/each}
+			<span class="text-border">|</span>
+			<a href="/#features" class="text-sm text-muted-foreground hover:text-foreground">Features</a>
+			<a href="/#installation" class="text-sm text-muted-foreground hover:text-foreground">Installation</a>
 			<ThemeToggle />
 			<Button variant="outline" size="sm" href="https://github.com/tufantunc/hi-shell">
 				<Github class="mr-2 h-4 w-4" />
@@ -51,34 +66,32 @@
 	{#if mobileMenuOpen}
 		<nav class="border-t border-border bg-background px-4 py-4 md:hidden">
 			<div class="flex flex-col gap-4">
+				{#each navLinks as link}
+					<a
+						href={link.href}
+						class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+						onclick={closeMenu}
+					>
+						<link.icon class="h-4 w-4" />
+						{link.label}
+					</a>
+				{/each}
+				<hr class="border-border" />
 				<a
-					href="#features"
+					href="/#features"
 					class="text-sm text-muted-foreground hover:text-foreground"
 					onclick={closeMenu}
 				>
 					Features
 				</a>
 				<a
-					href="#installation"
+					href="/#installation"
 					class="text-sm text-muted-foreground hover:text-foreground"
 					onclick={closeMenu}
 				>
 					Installation
 				</a>
-				<a
-					href="#usage"
-					class="text-sm text-muted-foreground hover:text-foreground"
-					onclick={closeMenu}
-				>
-					Usage
-				</a>
-				<a
-					href="#privacy-security"
-					class="text-sm text-muted-foreground hover:text-foreground"
-					onclick={closeMenu}
-				>
-					Privacy
-				</a>
+				<hr class="border-border" />
 				<Button variant="outline" size="sm" href="https://github.com/tufantunc/hi-shell" class="w-fit">
 					<Github class="mr-2 h-4 w-4" />
 					GitHub

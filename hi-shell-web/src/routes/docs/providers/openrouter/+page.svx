@@ -1,0 +1,93 @@
+<svelte:head>
+	<title>OpenRouter</title>
+	<meta name="description" content="Connect hi-shell to OpenRouter for access to dozens of LLM models through a single API." />
+	<meta property="og:title" content="OpenRouter Provider - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/providers/openrouter" />
+</svelte:head>
+
+# OpenRouter
+
+Connect hi-shell to [OpenRouter](https://openrouter.ai) for access to dozens of LLM models through a single API key. OpenRouter provides a unified interface to models from OpenAI, Anthropic, Google, Meta, and more.
+
+## Prerequisites
+
+- An [OpenRouter account](https://openrouter.ai)
+- An API key from [openrouter.ai/keys](https://openrouter.ai/keys)
+
+## Setup
+
+### 1. Get an API Key
+
+1. Sign up at [openrouter.ai](https://openrouter.ai)
+2. Go to [Keys](https://openrouter.ai/keys)
+3. Create a new API key
+4. Copy the key (starts with `sk-or-`)
+
+### 2. Configure hi-shell
+
+```bash
+hi-shell --init
+# Select "Cloud" → "OpenRouter"
+# Paste your API key
+# Choose a model (e.g., "microsoft/phi-3-mini-4k-instruct")
+```
+
+### Manual Configuration
+
+Edit `~/.config/hi-shell/config.toml`:
+
+```toml
+llm_provider = "Cloud"
+cloud_provider = "OpenRouter"
+cloud_model = "microsoft/phi-3-mini-4k-instruct"
+api_key = "sk-or-your-api-key-here"
+```
+
+## Recommended Models
+
+| Model | Cost | Quality | Speed | Best For |
+|-------|------|---------|-------|----------|
+| `microsoft/phi-3-mini-4k-instruct` | Free | Good | Fast | Default, good balance |
+| `meta-llama/llama-3.2-3b-instruct` | Free | Good | Fast | General use |
+| `google/gemini-2.0-flash-exp` | Free | Good | Very fast | Quick commands |
+| `anthropic/claude-3.5-sonnet` | Paid | Excellent | Medium | Complex tasks |
+| `openai/gpt-4o` | Paid | Excellent | Medium | High quality |
+
+> Many models on OpenRouter are **free** to use. Check [openrouter.ai/models](https://openrouter.ai/models) for pricing.
+
+## Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| `cloud_model` | Model identifier (e.g., `microsoft/phi-3-mini-4k-instruct`) |
+| `api_key` | Your OpenRouter API key |
+
+## Security Note
+
+Your API key is stored locally in the config file. Keep it secure:
+
+```bash
+# Set restrictive permissions on your config
+chmod 600 ~/.config/hi-shell/config.toml
+```
+
+## Troubleshooting
+
+### "Invalid API key" Error
+
+- Verify your key at [openrouter.ai/keys](https://openrouter.ai/keys)
+- Make sure the key starts with `sk-or-`
+- Check for extra whitespace when pasting
+
+### Rate Limiting
+
+Free models have rate limits. If you hit them:
+- Wait a moment and try again
+- Switch to a paid model for higher limits
+- Use a local provider instead
+
+### Model Not Available
+
+Some models may be temporarily unavailable. Try:
+- A different model
+- Checking the model status at openrouter.ai

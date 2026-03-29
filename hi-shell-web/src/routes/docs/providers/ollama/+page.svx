@@ -1,0 +1,127 @@
+<svelte:head>
+	<title>Ollama</title>
+	<meta name="description" content="Connect hi-shell to Ollama for local LLM inference. Run powerful models like Llama, Mistral, and CodeLlama locally." />
+	<meta property="og:title" content="Ollama Provider - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/providers/ollama" />
+</svelte:head>
+
+# Ollama
+
+Connect hi-shell to [Ollama](https://ollama.ai) for powerful local LLM inference. Ollama provides an easy way to run large language models locally with a simple API.
+
+## Prerequisites
+
+- [Ollama installed](https://ollama.ai) and running
+- At least one model pulled (e.g., `ollama pull llama3.2`)
+
+## Setup
+
+### 1. Install and Start Ollama
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Start the server
+ollama serve
+```
+
+### 2. Pull a Model
+
+```bash
+# Recommended models for hi-shell
+ollama pull llama3.2          # Good general-purpose model
+ollama pull mistral           # Fast and capable
+ollama pull codellama         # Optimized for code
+ollama pull qwen2.5-coder     # Great for shell commands
+```
+
+### 3. Configure hi-shell
+
+```bash
+hi-shell --init
+# Select "Local" → "Ollama"
+# The model name (e.g., "llama3.2")
+```
+
+### Manual Configuration
+
+Edit `~/.config/hi-shell/config.toml`:
+
+```toml
+llm_provider = "Local"
+local_provider = "Ollama"
+local_url = "http://localhost:11434"
+local_model = "llama3.2"
+```
+
+## Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `local_url` | `http://localhost:11434` | Ollama API endpoint |
+| `local_model` | — | Model name to use |
+
+## Custom Ollama URL
+
+If Ollama is running on a different host or port:
+
+```toml
+local_url = "http://192.168.1.100:11434"
+```
+
+## Verifying the Connection
+
+Test that hi-shell can connect to Ollama:
+
+```bash
+hi-shell list files in current directory
+```
+
+If you see a generated command, the connection works.
+
+## Recommended Models
+
+| Model | Size | Quality | Speed | Best For |
+|-------|------|---------|-------|----------|
+| `llama3.2` | 2.0 GB | Good | Fast | General use |
+| `llama3.2:1b` | 1.3 GB | OK | Very fast | Quick commands |
+| `mistral` | 4.1 GB | Very good | Medium | Complex commands |
+| `codellama` | 3.8 GB | Very good | Medium | Code-focused |
+| `qwen2.5-coder` | 4.7 GB | Excellent | Medium | Shell commands |
+
+## Troubleshooting
+
+### "Connection refused" Error
+
+Make sure Ollama is running:
+
+```bash
+ollama serve
+```
+
+Check that Ollama is listening on port 11434:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+### Model Not Found
+
+Pull the model first:
+
+```bash
+ollama pull llama3.2
+```
+
+List available models:
+
+```bash
+ollama list
+```
+
+### Slow Responses
+
+- Use a smaller model (e.g., `llama3.2:1b`)
+- Ensure you have enough RAM for the model
+- Check if GPU acceleration is working: `ollama ps`

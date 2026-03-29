@@ -1,0 +1,121 @@
+<svelte:head>
+	<title>LM Studio</title>
+	<meta name="description" content="Connect hi-shell to LM Studio for local LLM inference with a graphical interface." />
+	<meta property="og:title" content="LM Studio Provider - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/providers/lm-studio" />
+</svelte:head>
+
+# LM Studio
+
+Connect hi-shell to [LM Studio](https://lmstudio.ai) for local LLM inference with a user-friendly graphical interface. LM Studio makes it easy to download and run models with hardware acceleration.
+
+## Prerequisites
+
+- [LM Studio installed](https://lmstudio.ai) and running
+- At least one model downloaded in LM Studio
+- Local API server enabled in LM Studio
+
+## Setup
+
+### 1. Install LM Studio
+
+Download from [lmstudio.ai](https://lmstudio.ai) and install.
+
+### 2. Download a Model
+
+In LM Studio:
+1. Search for a model (e.g., "Llama 3.2")
+2. Click "Download"
+3. Wait for the download to complete
+
+Recommended models:
+- **Llama 3.2 1B/3B Instruct** — Fast, good quality
+- **Phi-3 Mini** — Compact and capable
+- **Mistral 7B Instruct** — High quality
+- **Qwen 2.5 Coder** — Great for code
+
+### 3. Enable the Local API Server
+
+In LM Studio:
+1. Go to the "Local Server" tab (the double-arrow icon)
+2. Select your downloaded model from the dropdown
+3. Click "Start Server"
+4. The server runs on `http://localhost:1234` by default
+
+### 4. Configure hi-shell
+
+```bash
+hi-shell --init
+# Select "Local" → "LM Studio"
+# Confirm the URL (default: http://localhost:1234)
+# Enter the model identifier
+```
+
+### Manual Configuration
+
+Edit `~/.config/hi-shell/config.toml`:
+
+```toml
+llm_provider = "Local"
+local_provider = "LmStudio"
+local_url = "http://localhost:1234"
+local_model = "lmstudio-community/Llama-3.2-1B-Instruct-GGUF"
+```
+
+## Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `local_url` | `http://localhost:1234` | LM Studio API endpoint |
+| `local_model` | — | Model identifier to use |
+
+## Custom Port
+
+If you changed the LM Studio port:
+
+```toml
+local_url = "http://localhost:8080"
+```
+
+## Verifying the Connection
+
+Test that hi-shell can connect to LM Studio:
+
+```bash
+hi-shell list all text files
+```
+
+You can also verify LM Studio's API directly:
+
+```bash
+curl http://localhost:1234/v1/models
+```
+
+## Troubleshooting
+
+### "Connection refused" Error
+
+- Make sure LM Studio is running
+- Verify the Local Server is started (not just the model loaded)
+- Check the correct port (default: 1234)
+
+### "Model not found" Error
+
+- Make sure a model is loaded in the Local Server tab
+- The model must be actively running (green indicator)
+
+### Slow Responses
+
+- Use a smaller quantized model
+- Enable GPU acceleration in LM Studio settings
+- Close other GPU-intensive applications
+
+### LM Studio vs. Ollama
+
+| Feature | LM Studio | Ollama |
+|---------|-----------|--------|
+| Interface | GUI | CLI |
+| Model management | Graphical | Command line |
+| Hardware accel. | Automatic | Automatic |
+| API compatibility | OpenAI-compatible | Native |
+| Best for | Visual users | Terminal users |

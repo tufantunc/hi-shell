@@ -1,0 +1,89 @@
+<svelte:head>
+	<title>OpenAI</title>
+	<meta name="description" content="Connect hi-shell to OpenAI GPT models for AI-powered shell command generation." />
+	<meta property="og:title" content="OpenAI Provider - hi-shell Docs" />
+	<link rel="canonical" href="https://hi-shell.dev/docs/providers/openai" />
+</svelte:head>
+
+# OpenAI
+
+Connect hi-shell to [OpenAI](https://openai.com) to use GPT models for shell command generation. GPT models provide excellent command generation quality with broad knowledge of shell commands across platforms.
+
+## Prerequisites
+
+- An [OpenAI account](https://platform.openai.com)
+- An API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+
+## Setup
+
+### 1. Get an API Key
+
+1. Sign up at [platform.openai.com](https://platform.openai.com)
+2. Go to **API Keys**
+3. Create a new secret key
+4. Copy the key (starts with `sk-`)
+
+### 2. Configure hi-shell
+
+```bash
+hi-shell --init
+# Select "Cloud" → "OpenAI"
+# Paste your API key
+# Choose a model (e.g., "gpt-4o-mini")
+```
+
+### Manual Configuration
+
+Edit `~/.config/hi-shell/config.toml`:
+
+```toml
+llm_provider = "Cloud"
+cloud_provider = "OpenAI"
+cloud_model = "gpt-4o-mini"
+api_key = "sk-your-api-key-here"
+```
+
+## Available Models
+
+| Model | Best For | Relative Cost |
+|-------|----------|---------------|
+| `gpt-4o-mini` | Fast, affordable, good quality | Low |
+| `gpt-4o` | Best quality responses | Medium |
+| `gpt-4.1-mini` | Latest fast model | Low |
+| `gpt-4.1` | Latest flagship model | Medium |
+
+> We recommend **gpt-4o-mini** as the default — it's fast, affordable, and generates excellent shell commands.
+
+## Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| `cloud_model` | Model identifier |
+| `api_key` | Your OpenAI API key |
+
+## Pricing
+
+OpenAI charges per token. For hi-shell usage:
+
+- Each command typically uses ~200-500 tokens
+- **gpt-4o-mini**: ~$0.0002 per command
+- **gpt-4o**: ~$0.001 per command
+
+Very affordable for typical daily usage. Check [openai.com/pricing](https://openai.com/pricing) for current rates.
+
+## Troubleshooting
+
+### "Invalid API key" Error
+
+- Verify your key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+- Ensure you're using an API key, not a ChatGPT Plus subscription
+- Check for extra whitespace
+
+### "Insufficient quota"
+
+- Add billing details in OpenAI platform settings
+- Check your usage limits
+
+### Organization Errors
+
+If you're part of multiple organizations, make sure you're using the correct API key for the intended organization.
